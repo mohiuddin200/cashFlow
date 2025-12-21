@@ -2,6 +2,7 @@
   "name": "CashFlow Personal Finance",
   "description": "A simple, mobile-first personal finance tracker for managing cash, income, and expenses with AI-powered insights.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ]
 }

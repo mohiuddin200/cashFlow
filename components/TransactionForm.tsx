@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Category, Transaction, TransactionType } from '../types';
-import { parseTransactionPrompt } from '../services/geminiService';
+import { parseTransactionPrompt, parseReceiptImage } from '../services/geminiService';
 
 interface TransactionFormProps {
   categories: Category[];
@@ -18,29 +18,90 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
   const [note, setNote] = useState(initialData?.note || '');
   const [aiInput, setAiInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const filteredCategories = categories.filter(c => c.type === type);
+
+  const applyParsingResult = (result: any) => {
+    if (result) {
+      if (result.type) setType(result.type);
+      if (result.amount) setAmount(result.amount.toString());
+      if (result.note) setNote(result.note);
+      
+      const cat = categories.find(c => 
+        c.name.toLowerCase() === result.categoryName?.toLowerCase() && 
+        c.type === (result.type || type)
+      );
+      if (cat) setCategoryId(cat.id);
+    }
+  };
 
   const handleAiParse = async () => {
     if (!aiInput.trim()) return;
     setIsParsing(true);
     const result = await parseTransactionPrompt(aiInput, categories);
     setIsParsing(false);
-    
-    if (result) {
-      setType(result.type);
-      setAmount(result.amount.toString());
-      setNote(result.note);
-      const cat = categories.find(c => c.name.toLowerCase() === result.categoryName.toLowerCase() && c.type === result.type);
-      if (cat) setCategoryId(cat.id);
+    applyParsingResult(result);
+  };
+
+  const handleVoiceInput = () => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
     }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice recognition not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsRecording(true);
+    recognition.onend = () => setIsRecording(false);
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setAiInput(transcript);
+      // Auto-trigger parsing
+      setIsParsing(true);
+      parseTransactionPrompt(transcript, categories).then(result => {
+        applyParsingResult(result);
+        setIsParsing(false);
+      });
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsParsing(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(',')[1];
+      const result = await parseReceiptImage(base64, file.type, categories);
+      applyParsingResult(result);
+      setIsParsing(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!amount || parseFloat(amount) <= 0) {
-      newErrors.amount = 'Please enter a valid amount greater than 0';
+      newErrors.amount = 'Please enter a valid amount';
     }
     if (!categoryId) {
       newErrors.category = 'Please select a category';
@@ -65,33 +126,58 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
   return (
     <div className="space-y-6 pb-20">
       <div className="flex justify-between items-center mb-2">
-        <h2 className="text-2xl font-bold text-gray-800">{initialData ? 'Edit Transaction' : 'Add Transaction'}</h2>
+        <h2 className="text-2xl font-bold text-gray-800">{initialData ? 'Edit Details' : 'Add New'}</h2>
         <button onClick={onCancel} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
           <span className="text-xl font-medium">&times;</span>
         </button>
       </div>
 
-      {/* AI Parsing Quick Entry */}
       {!initialData && (
-        <div className="bg-emerald-50/50 p-4 rounded-3xl border border-emerald-100">
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-4 rounded-3xl border border-emerald-100 shadow-sm">
           <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest block mb-2 px-1">Smart AI Entry</label>
           <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input 
+                type="text" 
+                placeholder="e.g. Spent 150 on lunch"
+                className="w-full bg-white border border-emerald-200 rounded-2xl pl-4 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm text-gray-700"
+                value={aiInput}
+                onChange={e => setAiInput(e.target.value)}
+              />
+              <button 
+                type="button"
+                onClick={handleVoiceInput}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'text-emerald-500 hover:bg-emerald-50'}`}
+              >
+                {isRecording ? '⏹' : '🎤'}
+              </button>
+            </div>
+            
+            <button 
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-white border border-emerald-200 text-emerald-600 w-12 rounded-2xl text-lg flex items-center justify-center shadow-sm hover:bg-emerald-50 active:scale-95 transition-all"
+            >
+              📷
+            </button>
             <input 
-              type="text" 
-              placeholder="e.g. Spent 150 on lunch today"
-              className="flex-1 bg-white border border-emerald-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm text-gray-700"
-              value={aiInput}
-              onChange={e => setAiInput(e.target.value)}
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              accept="image/*" 
+              onChange={handleFileSelect} 
             />
+
             <button 
               type="button"
               onClick={handleAiParse}
-              disabled={isParsing}
-              className="bg-emerald-600 text-white w-12 rounded-2xl text-lg flex items-center justify-center shadow-lg shadow-emerald-100 disabled:opacity-50"
+              disabled={isParsing || !aiInput.trim()}
+              className="bg-emerald-600 text-white w-12 rounded-2xl text-lg flex items-center justify-center shadow-lg shadow-emerald-200 disabled:opacity-50 active:scale-95 transition-all"
             >
-              {isParsing ? '...' : '✨'}
+              {isParsing ? '⏳' : '✨'}
             </button>
           </div>
+          {isParsing && <p className="text-[9px] text-emerald-600 font-bold mt-2 animate-pulse uppercase text-center tracking-widest">Gemini is analyzing...</p>}
         </div>
       )}
 
@@ -128,7 +214,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
               }}
             />
           </div>
-          {errors.amount && <p className="text-red-500 text-xs mt-2 ml-1 font-medium">{errors.amount}</p>}
+          {errors.amount && <p className="text-red-500 text-[10px] mt-2 ml-1 font-bold uppercase">{errors.amount}</p>}
         </div>
 
         <div>
@@ -149,7 +235,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
               </button>
             ))}
           </div>
-          {errors.category && <p className="text-red-500 text-xs mt-2 ml-1 font-medium">{errors.category}</p>}
+          {errors.category && <p className="text-red-500 text-[10px] mt-2 ml-1 font-bold uppercase">{errors.category}</p>}
         </div>
 
         <div className="grid grid-cols-1 gap-5">
@@ -181,16 +267,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
         >
           {initialData ? 'Update Transaction' : 'Save Transaction'}
         </button>
-        
-        {initialData && (
-          <button 
-            type="button" 
-            onClick={onCancel}
-            className="w-full py-4 text-gray-500 font-bold hover:text-gray-800 transition-colors"
-          >
-            Cancel Edit
-          </button>
-        )}
       </form>
     </div>
   );
