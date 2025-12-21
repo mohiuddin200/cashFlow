@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Category, Transaction, TransactionType } from '../types';
-import { parseTransactionPrompt, parseReceiptImage } from '../services/geminiService';
+import { parseTransactionPrompt } from '../services/geminiService';
 
 interface TransactionFormProps {
   categories: Category[];
@@ -22,8 +22,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
   const [isRecording, setIsRecording] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+    const recognitionRef = useRef<any>(null);
 
   const filteredCategories = categories.filter(c => c.type === type);
 
@@ -100,21 +99,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
     recognition.start();
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsParsing(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = (reader.result as string).split(',')[1];
-      const result = await parseReceiptImage(base64, file.type, categories);
-      applyParsingResult(result);
-      setIsParsing(false);
-    };
-    reader.readAsDataURL(file);
-  };
-
+  
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!amount || parseFloat(amount) <= 0) {
@@ -161,14 +146,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
           <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest block mb-2 px-1">Smart AI Entry</label>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="e.g. Spent 150 on lunch"
                 className="w-full bg-white border border-emerald-200 rounded-2xl pl-4 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm text-gray-700"
                 value={aiInput}
                 onChange={e => setAiInput(e.target.value)}
               />
-              <button 
+              <button
                 type="button"
                 onClick={handleVoiceInput}
                 className={`absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'text-emerald-500 hover:bg-emerald-50'}`}
@@ -176,23 +161,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
                 {isRecording ? '⏹' : '🎤'}
               </button>
             </div>
-            
-            <button 
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-white border border-emerald-200 text-emerald-600 w-12 rounded-2xl text-lg flex items-center justify-center shadow-sm hover:bg-emerald-50 active:scale-95 transition-all"
-            >
-              📷
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              accept="image/*" 
-              onChange={handleFileSelect} 
-            />
 
-            <button 
+            <button
               type="button"
               onClick={handleAiParse}
               disabled={isParsing || !aiInput.trim()}
