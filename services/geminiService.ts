@@ -1,123 +1,85 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { Category, TransactionType } from "../types";
+import { Category } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+// Use Vercel API route instead of direct DeepSeek API
+const API_ENDPOINT = import.meta.env.DEV 
+  ? 'http://localhost:3000/api/deepseek'  // Local development
+  : '/api/deepseek';  // Production Vercel
 
-const TRANSACTION_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    amount: { type: Type.NUMBER },
-    categoryName: { type: Type.STRING },
-    type: { type: Type.STRING, enum: ["income", "expense"] },
-    note: { type: Type.STRING },
-  },
-  required: ["amount", "categoryName", "type"],
-};
-
-export const parseTransactionPrompt = async (
-  text: string,
-  categories: Category[]
-) => {
-  const categoryNames = categories
-    .map((c) => `${c.name} (${c.type})`)
-    .join(", ");
-
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `You are a financial transaction parsing specialist. Analyze the following transaction description: "${text}".
-
-Your task is to extract structured information and assign it to the most appropriate category from this list: [${categoryNames}].
-
-Instructions:
-- Extract the monetary amount accurately
-- Determine transaction type as either "income" or "expense"
-- Select the most specific category that matches; if no exact match exists, choose the closest alternative or default to "Shopping"
-- Generate a concise note describing the transaction
-
-Return the results in valid JSON format adhering to the provided schema.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: TRANSACTION_SCHEMA,
+async function callDeepSeek(model: string, messages: any[], temperature: number, response_format?: any) {
+  const response = await fetch(API_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
     },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature,
+      response_format
+    })
   });
 
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `API request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export const parseTransactionPrompt = async (text: string, categories: Category[]) => {
+  const categoryNames = categories.map(c => `${c.name} (${c.type})`).join(', ');
+
+  const data = await callDeepSeek(
+    'deepseek-chat',
+    [
+      {
+        role: 'system',
+        content: 'You are a financial transaction parser. Always respond with valid JSON only.'
+      },
+      {
+        role: 'user',
+        content: `Parse this spending note: "${text}".
+Categorize it into one of these: [${categoryNames}].
+If no clear category, pick the closest one or "Shopping".
+Return JSON with: amount (number), categoryName (string), type ("income" or "expense"), note (string, optional).`
+      }
+    ],
+    0.3,
+    { type: 'json_object' }
+  );
+
   try {
-    return JSON.parse(response.text || "{}");
+    const content = data.choices[0]?.message?.content || '{}';
+    return JSON.parse(content);
   } catch (e) {
     return null;
   }
 };
 
-export const parseReceiptImage = async (
-  base64Data: string,
-  mimeType: string,
-  categories: Category[]
-) => {
-  const categoryNames = categories
-    .map((c) => `${c.name} (${c.type})`)
-    .join(", ");
-
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: {
-      parts: [
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: mimeType,
-          },
-        },
-        {
-          text: `You are a receipt analysis specialist. Examine the provided receipt image and extract the following information:
-
-Required Data:
-1. Total transaction amount (extract the precise numerical value)
-2. Merchant or store name (use as the transaction note)
-3. Transaction category (select from: [${categoryNames}])
-
-Guidelines:
-- Only extract data that is clearly legible and unambiguous
-- If the total amount is unclear, do not estimate or guess
-- Choose the most appropriate category based on merchant type and context
-- Default to "Shopping" only when no better category matches
-
-Return the extracted information in valid JSON format following the specified schema.`,
-        },
-      ],
-    },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: TRANSACTION_SCHEMA,
-    },
-  });
-
-  try {
-    return JSON.parse(response.text || "{}");
-  } catch (e) {
-    return null;
-  }
+export const parseReceiptImage = async (base64Data: string, mimeType: string, categories: Category[]) => {
+  // DeepSeek doesn't support vision API yet
+  console.warn('Receipt image parsing is not supported with DeepSeek');
+  return null;
 };
 
 export const getFinancialAdvice = async (summary: string) => {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-pro-preview",
-    contents: `You are a certified financial advisor specializing in personal finance optimization. Analyze the provided monthly financial summary and deliver three specific, actionable recommendations to enhance financial well-being.
+  const data = await callDeepSeek(
+    'deepseek-reasoner',
+    [
+      {
+        role: 'system',
+        content: 'You are a professional financial coach. Provide clear, actionable advice.'
+      },
+      {
+        role: 'user',
+        content: `Analyze this monthly summary and provide 3 actionable, highly specific tips to improve their financial health.
+Summary: ${summary}
+Keep it concise and encouraging.`
+      }
+    ],
+    0.7
+  );
 
-Monthly Financial Summary:
-${summary}
-
-Requirements for your analysis:
-- Provide exactly three distinct recommendations
-- Each recommendation must be concrete and immediately implementable
-- Focus on measurable financial improvements
-- Address both spending optimization and financial growth opportunities
-- Maintain an encouraging and supportive tone
-- Structure your response with clear headings for each recommendation
-
-Please deliver your insights in a format that empowers the user to take meaningful action toward their financial goals.`,
-    config: {
-      thinkingConfig: { thinkingBudget: 2000 },
-    },
-  });
-  return response.text;
+  return data.choices[0]?.message?.content || 'Unable to generate advice at this time.';
 };
