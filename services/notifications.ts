@@ -3,7 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 
 class NotificationService {
-  private vapidKey = import.meta.env.VITE_VAPID_KEY ; // This needs to be generated from Firebase Console
+  private vapidKey = import.meta.env.VITE_VAPID_KEY || null; // This needs to be generated from Firebase Console
   private messaging: any = null;
 
   private async getMessaging() {
@@ -61,6 +61,11 @@ class NotificationService {
 
       if (!messaging) {
         console.log('Firebase Messaging not available');
+        return null;
+      }
+
+      if (!this.vapidKey) {
+        console.error('VAPID key is not configured. Please add VITE_VAPID_KEY to your environment variables.');
         return null;
       }
 

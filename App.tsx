@@ -42,6 +42,19 @@ const App: React.FC = () => {
   // Initialize PWA features and notifications
   const { initializeNotifications, cleanup } = useNotifications();
 
+  // Register Firebase messaging service worker (PWA service worker is registered automatically)
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        .then((registration) => {
+          console.log('Firebase Messaging Service Worker registered:', registration);
+        })
+        .catch((error) => {
+          console.log('Firebase Messaging Service Worker registration failed:', error);
+        });
+    }
+  }, []);
+
   // Initialize PWA services on app start
   useEffect(() => {
     const initPWA = async () => {
@@ -51,9 +64,12 @@ const App: React.FC = () => {
 
         // Initialize push notifications (only if user is logged in and not localhost)
         if (user && window.location.hostname !== 'localhost') {
-          // Temporarily disabled until VAPID key is configured
-          // await initializeNotifications();
-          console.log('Push notifications disabled - VAPID key needs to be configured');
+          try {
+            await initializeNotifications();
+            console.log('Push notifications initialized successfully');
+          } catch (error) {
+            console.error('Failed to initialize push notifications:', error);
+          }
         }
       } catch (error) {
         console.error('Error initializing PWA features:', error);
