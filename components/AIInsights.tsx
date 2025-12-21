@@ -3,8 +3,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, MonthlyStats, Category } from '../types';
 import { getFinancialAdvice } from '../services/geminiService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
-import { saveFinancialAdvice } from '../services/firebase';
+import { saveFinancialAdvice, getLatestAdvice } from '../services/firebase';
 import { User } from 'firebase/auth';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface AIInsightsProps {
   transactions: Transaction[];
@@ -79,6 +81,23 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
     }).format(val).replace(/[A-Z]{3}/, symbol);
   };
 
+  const loadExistingAdvice = async () => {
+    if (!user) return;
+
+    try {
+      const latestAdvice = await getLatestAdvice(user.uid);
+      if (latestAdvice) {
+        setAdvice(latestAdvice.content);
+        setLastRefreshed(new Date(latestAdvice.createdAt));
+      } else {
+        setAdvice("Start adding transactions to get personalized financial advice from Gemini.");
+      }
+    } catch (error) {
+      console.error('Error loading existing advice:', error);
+      setAdvice("Start adding transactions to get personalized financial advice from Gemini.");
+    }
+  };
+
   const fetchAdvice = async (saveToFirebase = true) => {
     if (!user) {
       setAdvice("Please sign in to get personalized financial advice.");
@@ -127,9 +146,9 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
   };
 
   useEffect(() => {
-    if (transactions.length > 0 && user) {
-      fetchAdvice();
-    } else if (!user) {
+    if (user) {
+      loadExistingAdvice();
+    } else {
       setAdvice("Please sign in to get personalized financial advice.");
     }
   }, [user]);
@@ -192,25 +211,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
           )}
         </div>
 
-        {loading ? (
-          <div className="animate-pulse space-y-3">
-            <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-3/4"></div>
-            <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-5/6"></div>
-            <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-2/3"></div>
-            <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-4/5"></div>
-          </div>
-        ) : (
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-50 to-blue-50 rounded-2xl transform rotate-1 opacity-50"></div>
-            <div className="relative bg-white p-4 rounded-2xl shadow-sm border border-emerald-50">
-              <p className="text-gray-700 leading-relaxed font-medium text-sm">
-                {advice || "Start adding transactions to get personalized financial advice from Gemini."}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between mt-6">
+        <div className="flex items-center justify-between mb-4">
           <button
             onClick={handleRefresh}
             disabled={loading}
@@ -224,7 +225,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            {loading ? 'Generating...' : 'Refresh'}
+            {loading ? 'Generating...' : 'Generate New Advice'}
           </button>
 
           {!user && (
@@ -233,6 +234,44 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
             </span>
           )}
         </div>
+
+        {loading ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-3/4"></div>
+            <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-5/6"></div>
+            <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-2/3"></div>
+            <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-4/5"></div>
+          </div>
+        ) : (
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-50 to-blue-50 rounded-2xl transform rotate-1 opacity-50"></div>
+            <div className="relative bg-white p-4 rounded-2xl shadow-sm border border-emerald-50">
+              <div className="prose prose-sm prose-emerald max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    p: ({children}) => <p className="text-gray-700 leading-relaxed font-medium text-sm mb-3">{children}</p>,
+                    ul: ({children}) => <ul className="list-disc list-inside space-y-2 mb-3">{children}</ul>,
+                    ol: ({children}) => <ol className="list-decimal list-inside space-y-2 mb-3">{children}</ol>,
+                    li: ({children}) => <li className="text-gray-700 leading-relaxed font-medium text-sm">{children}</li>,
+                    strong: ({children}) => <strong className="font-bold text-emerald-700">{children}</strong>,
+                    em: ({children}) => <em className="italic text-gray-600">{children}</em>,
+                    h1: ({children}) => <h1 className="text-lg font-bold text-gray-800 mb-2">{children}</h1>,
+                    h2: ({children}) => <h2 className="text-base font-bold text-gray-800 mb-2">{children}</h2>,
+                    h3: ({children}) => <h3 className="text-sm font-bold text-gray-800 mb-1">{children}</h3>,
+                    blockquote: ({children}) => <blockquote className="border-l-4 border-emerald-300 pl-3 italic text-gray-600 my-2">{children}</blockquote>,
+                    code: ({inline, children}) =>
+                      inline ?
+                        <code className="bg-emerald-50 text-emerald-700 px-1 py-0.5 rounded text-xs font-mono">{children}</code> :
+                        <pre className="bg-gray-50 p-2 rounded-lg overflow-x-auto my-2"><code className="text-xs font-mono text-gray-700">{children}</code></pre>
+                  }}
+                >
+                  {advice || "Start adding transactions to get personalized financial advice from Gemini."}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/*TODO: Rechart is not working */}

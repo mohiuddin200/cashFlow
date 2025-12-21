@@ -13,6 +13,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   updateDoc,
   onSnapshot,
   collection,
@@ -28,7 +29,7 @@ import {
 } from "firebase/firestore";
 import { getMessaging } from "firebase/messaging";
 import type { User } from "firebase/auth";
-import type { Transaction, Category } from "../types";
+import type { Transaction, Category, FinancialAdvice } from "../types";
 import { DEFAULT_CURRENCY } from "../constants";
 import { offlineSyncService } from "./offlineSync";
 
@@ -379,6 +380,29 @@ export const subscribeToAdviceHistory = (userId: string, callback: (advice: any[
   });
 };
 
+export const getLatestAdvice = async (userId: string): Promise<FinancialAdvice | null> => {
+  try {
+    const adviceCollection = collection(db, "users", userId, "advice");
+    const q = query(adviceCollection, orderBy("createdAt", "desc"), limit(1));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      const doc = querySnapshot.docs[0];
+      const data = doc.data();
+      return {
+        id: doc.id,
+        content: data.content,
+        summary: data.summary,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Error getting latest advice:", error);
+    return null;
+  }
+};
+
 export {
   signInWithPopup,
   signInWithEmailAndPassword,
@@ -388,6 +412,7 @@ export {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   updateDoc,
   onSnapshot,
   collection,
