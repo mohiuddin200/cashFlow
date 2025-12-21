@@ -99,17 +99,21 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
       const result = await getFinancialAdvice(summary);
       const adviceText = result || 'Keep saving and tracking your cash flow!';
       setAdvice(adviceText);
-
-      // Save to Firebase if user is authenticated
-      if (saveToFirebase && user) {
-        await saveFinancialAdvice(user.uid, {
-          content: adviceText,
-          summary: summary
-        });
-        setAdviceSaved(true);
-      }
-
       setLastRefreshed(new Date());
+
+      // Save to Firebase if user is authenticated (separate error handling)
+      if (saveToFirebase && user) {
+        try {
+          await saveFinancialAdvice(user.uid, {
+            content: adviceText,
+            summary: summary
+          });
+          setAdviceSaved(true);
+        } catch (saveError) {
+          console.error('Error saving advice to Firebase:', saveError);
+          // Don't show error to user, advice is still displayed
+        }
+      }
     } catch (error) {
       console.error('Error fetching advice:', error);
       setAdvice('Unable to fetch advice at the moment. Please try again later.');
