@@ -231,6 +231,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
         </div>
       </div>
 
+      {/*TODO: Rechart is not working */}
       {/* <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-3xl shadow-lg border border-gray-100">
         <h3 className="text-[11px] font-bold bg-gradient-to-r from-gray-600 to-gray-800 bg-clip-text text-transparent uppercase tracking-wider mb-6">
           Spending Breakdown
