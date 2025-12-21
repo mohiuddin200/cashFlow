@@ -96,11 +96,8 @@ const InstallPrompt: React.FC = () => {
     localStorage.setItem('cashflow-install-dismissed', 'true');
   };
 
-  // Don't show install prompt on localhost as it doesn't work due to browser security
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-  // Don't show if already installed, no install prompt available, or on localhost
-  if (isInstalled || !showInstallBanner || isLocalhost) {
+  // Don't show if already installed or no install prompt available
+  if (isInstalled || !showInstallBanner) {
     return null;
   }
 
@@ -109,7 +106,7 @@ const InstallPrompt: React.FC = () => {
 
   if (isIOS) {
     return (
-      <div className="fixed bottom-0 left-0 right-0 bg-emerald-600 text-white p-4 shadow-lg z-[60]">
+      <div className="fixed bottom-0 left-0 right-0 bg-emerald-600 text-white p-4 shadow-lg z-[70]">
         <div className="max-w-md mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex-1">
@@ -135,7 +132,7 @@ const InstallPrompt: React.FC = () => {
 
   // Standard install prompt for supported browsers
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-emerald-600 text-white p-4 shadow-lg z-[60]">
+    <div className="fixed bottom-0 left-0 right-0 bg-emerald-600 text-white p-4 shadow-lg z-[70]">
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between">
           <div className="flex-1">

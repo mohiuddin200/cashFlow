@@ -49,9 +49,11 @@ const App: React.FC = () => {
         // Initialize offline sync service
         await initializeOfflineSync();
 
-        // Initialize push notifications (only if user is logged in)
-        if (user) {
-          await initializeNotifications();
+        // Initialize push notifications (only if user is logged in and not localhost)
+        if (user && window.location.hostname !== 'localhost') {
+          // Temporarily disabled until VAPID key is configured
+          // await initializeNotifications();
+          console.log('Push notifications disabled - VAPID key needs to be configured');
         }
       } catch (error) {
         console.error('Error initializing PWA features:', error);

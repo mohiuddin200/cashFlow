@@ -3,7 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 
 class NotificationService {
-  private vapidKey = 'YOUR_VAPID_KEY_HERE'; // This needs to be generated from Firebase Console
+  private vapidKey = import.meta.env.VITE_VAPID_KEY ; // This needs to be generated from Firebase Console
   private messaging: any = null;
 
   private async getMessaging() {
