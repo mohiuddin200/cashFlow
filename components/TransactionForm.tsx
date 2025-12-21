@@ -7,10 +7,11 @@ interface TransactionFormProps {
   categories: Category[];
   onSubmit: (t: Omit<Transaction, 'id'>) => void;
   onCancel: () => void;
+  onDelete?: () => void;
   initialData?: Transaction;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit, onCancel, initialData }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit, onCancel, onDelete, initialData }) => {
   const [type, setType] = useState<TransactionType>(initialData?.type || 'expense');
   const [amount, setAmount] = useState(initialData?.amount.toString() || '');
   const [categoryId, setCategoryId] = useState(initialData?.categoryId || '');
@@ -25,6 +26,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
   const recognitionRef = useRef<any>(null);
 
   const filteredCategories = categories.filter(c => c.type === type);
+
+  console.log('TransactionForm state:', {
+    amount,
+    categoryId,
+    date,
+    note,
+    type,
+    errors,
+    filteredCategoriesCount: filteredCategories.length
+  });
 
   const applyParsingResult = (result: any) => {
     if (result) {
@@ -107,13 +118,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
       newErrors.category = 'Please select a category';
     }
     setErrors(newErrors);
+    console.log('Validation errors found:', newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
-    
+    console.log('Form submitted with data:', { amount, categoryId, date, note, type });
+
+    if (!validate()) {
+      console.log('Form validation failed, returning early');
+      return;
+    }
+
+    console.log('Form validation passed, calling onSubmit');
     onSubmit({
       amount: parseFloat(amount),
       categoryId,
@@ -225,6 +243,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
                 key={cat.id}
                 type="button"
                 onClick={() => {
+                  console.log('Category selected:', cat.name, 'with ID:', cat.id);
                   setCategoryId(cat.id);
                   if (errors.category) setErrors({...errors, category: ''});
                 }}
@@ -261,12 +280,23 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
           </div>
         </div>
 
-        <button 
-          type="submit"
-          className={`w-full py-5 text-white font-bold rounded-3xl shadow-xl transition-all active:scale-[0.98] ${type === 'income' ? 'bg-emerald-600 shadow-emerald-100' : 'bg-gray-800 shadow-gray-200'}`}
-        >
-          {initialData ? 'Update Transaction' : 'Save Transaction'}
-        </button>
+        <div className="flex gap-3">
+          {initialData && onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="px-6 py-5 bg-red-500 text-white font-bold rounded-3xl shadow-xl transition-all active:scale-[0.98] hover:bg-red-600"
+            >
+              Delete
+            </button>
+          )}
+          <button
+            type="submit"
+            className={`flex-1 py-5 text-white font-bold rounded-3xl shadow-xl transition-all active:scale-[0.98] ${type === 'income' ? 'bg-emerald-600 shadow-emerald-100' : 'bg-gray-800 shadow-gray-200'}`}
+          >
+            {initialData ? 'Update Transaction' : 'Save Transaction'}
+          </button>
+        </div>
       </form>
     </div>
   );

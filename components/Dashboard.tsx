@@ -10,9 +10,10 @@ interface DashboardProps {
   spendingGoal: number;
   setSpendingGoal: (goal: number) => void;
   onEdit: (t: Transaction) => void;
+  isLoading?: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransactions, categories, spendingGoal, setSpendingGoal, onEdit }) => {
+const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransactions, categories, spendingGoal, setSpendingGoal, onEdit, isLoading = false }) => {
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState(spendingGoal.toString());
 
@@ -131,7 +132,19 @@ const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransaction
           <button className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">View All</button>
         </div>
         <div className="space-y-3">
-          {recentTransactions.length === 0 ? (
+          {isLoading ? (
+            // Loading skeleton
+            Array.from({ length: 3 }).map((_, index) => (
+              <div key={`skeleton-${index}`} className="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-gray-50">
+                <div className="w-12 h-12 rounded-2xl bg-gray-200 mr-4 animate-pulse"></div>
+                <div className="flex-1 min-w-0">
+                  <div className="h-5 bg-gray-200 rounded-lg mb-2 animate-pulse w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded-lg animate-pulse w-1/2"></div>
+                </div>
+                <div className="h-6 bg-gray-200 rounded-lg animate-pulse w-16 ml-2"></div>
+              </div>
+            ))
+          ) : recentTransactions.length === 0 ? (
             <div className="text-center py-12 text-gray-400 bg-white rounded-[32px] border-2 border-dashed border-gray-100">
               <p className="text-4xl mb-2">🌱</p>
               <p className="text-[10px] font-black uppercase tracking-widest">No transactions yet</p>
@@ -140,8 +153,8 @@ const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransaction
             recentTransactions.map(t => {
               const category = categories.find(c => c.id === t.categoryId);
               return (
-                <div 
-                  key={t.id} 
+                <div
+                  key={t.id}
                   onClick={() => onEdit(t)}
                   className="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-gray-50 active:bg-gray-50 transition-all cursor-pointer hover:shadow-md"
                 >

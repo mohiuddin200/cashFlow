@@ -9,11 +9,25 @@ import CategoryManager from './components/CategoryManager';
 import AIInsights from './components/AIInsights';
 import Account from './components/Account';
 import Auth from './components/Auth';
-import { auth, onAuthStateChanged, db, doc, setDoc, onSnapshot, User } from './services/firebase';
+import {
+  auth,
+  onAuthStateChanged,
+  User,
+  saveTransaction,
+  updateTransaction as updateTransactionInFirebase,
+  deleteTransaction as deleteTransactionInFirebase,
+  subscribeToTransactions,
+  subscribeToCategories,
+  updateUserSettings,
+  initializeUserDocument,
+  saveCategory,
+  subscribeToUserSettings
+} from './services/firebase';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'add' | 'categories' | 'insights' | 'account'>('home');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
@@ -34,72 +48,125 @@ const App: React.FC = () => {
     if (!user) {
       setTransactions([]);
       setCategories(DEFAULT_CATEGORIES);
+      setSpendingGoal(20000);
+      setIsDataLoading(false);
       return;
     }
 
-    const userDocRef = doc(db, "users", user.uid);
-    const unsubscribe = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        if (data.transactions) setTransactions(data.transactions);
-        if (data.categories) setCategories(data.categories);
-        if (data.spendingGoal) setSpendingGoal(data.spendingGoal);
-      } else {
-        // Initialize new user data in Firestore
-        setDoc(userDocRef, {
-          transactions: [],
-          categories: DEFAULT_CATEGORIES,
-          spendingGoal: 20000,
-          email: user.email,
-          updatedAt: new Date().toISOString()
-        });
+    setIsDataLoading(true);
+
+    // Initialize user document if it doesn't exist
+    initializeUserDocument(user.uid, user.email || undefined).catch(console.error);
+
+    let hasLoadedTransactions = false;
+    let hasLoadedCategories = false;
+    let hasLoadedSettings = false;
+
+    const checkIfAllLoaded = () => {
+      if (hasLoadedTransactions && hasLoadedCategories && hasLoadedSettings) {
+        setIsDataLoading(false);
       }
+    };
+
+    // Subscribe to transactions
+    const unsubscribeTransactions = subscribeToTransactions(user.uid, (fetchedTransactions) => {
+      setTransactions(fetchedTransactions);
+      hasLoadedTransactions = true;
+      checkIfAllLoaded();
     });
 
-    return () => unsubscribe();
+    // Subscribe to categories
+    const unsubscribeCategories = subscribeToCategories(user.uid, (fetchedCategories) => {
+      // If user has no custom categories, use defaults
+      if (fetchedCategories.length === 0) {
+        setCategories(DEFAULT_CATEGORIES);
+      } else {
+        setCategories(fetchedCategories);
+      }
+      hasLoadedCategories = true;
+      checkIfAllLoaded();
+    });
+
+    // Subscribe to user settings
+    const unsubscribeUserSettings = subscribeToUserSettings(user.uid, (settings) => {
+      setSpendingGoal(settings.spendingGoal);
+      hasLoadedSettings = true;
+      checkIfAllLoaded();
+    });
+
+    return () => {
+      unsubscribeTransactions();
+      unsubscribeCategories();
+      unsubscribeUserSettings();
+    };
   }, [user]);
 
-  // Push updates to Firestore
-  const updateFirestore = async (newData: Partial<{ transactions: Transaction[], categories: Category[], spendingGoal: number }>) => {
-    if (!user) return;
-    const userDocRef = doc(db, "users", user.uid);
-    await setDoc(userDocRef, { ...newData, updatedAt: new Date().toISOString() }, { merge: true });
-  };
+  // Transaction operations
+  const addTransaction = async (t: Omit<Transaction, 'id'>) => {
+    console.log('addTransaction called with:', t);
+    console.log('User authenticated:', !!user);
+    if (!user) {
+      console.log('No user found, returning');
+      return;
+    }
 
-  const addTransaction = (t: Omit<Transaction, 'id'>) => {
-    const newTransaction = { ...t, id: crypto.randomUUID() };
-    const updated = [newTransaction, ...transactions];
-    setTransactions(updated);
-    updateFirestore({ transactions: updated });
-    setActiveTab('home');
-  };
-
-  const updateTransaction = (updated: Transaction) => {
-    const newList = transactions.map(t => t.id === updated.id ? updated : t);
-    setTransactions(newList);
-    updateFirestore({ transactions: newList });
-    setEditingTransaction(null);
-    setActiveTab('history');
-  };
-
-  const deleteTransaction = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this transaction?')) {
-      const updated = transactions.filter(t => t.id !== id);
-      setTransactions(updated);
-      updateFirestore({ transactions: updated });
+    try {
+      console.log('Calling saveTransaction with userId:', user.uid);
+      const result = await saveTransaction(user.uid, t);
+      console.log('saveTransaction successful:', result);
+      setActiveTab('home');
+    } catch (error) {
+      console.error("Error adding transaction:", error);
+      alert("Failed to add transaction. Please try again.");
     }
   };
 
-  const handleSetSpendingGoal = (goal: number) => {
-    setSpendingGoal(goal);
-    updateFirestore({ spendingGoal: goal });
+  const updateTransaction = async (updated: Transaction) => {
+    if (!user) return;
+
+    try {
+      await updateTransactionInFirebase(user.uid, updated.id, updated);
+      setEditingTransaction(null);
+      setActiveTab('history');
+    } catch (error) {
+      console.error("Error updating transaction:", error);
+      alert("Failed to update transaction. Please try again.");
+    }
   };
 
-  const handleAddCategory = (c: Omit<Category, 'id'>) => {
-    const newCategory = { ...c, id: crypto.randomUUID() };
-    const updated = [...categories, newCategory];
-    setCategories(updated);
-    updateFirestore({ categories: updated });
+  const deleteTransaction = async (id: string) => {
+    if (!user) return;
+
+    if (window.confirm('Are you sure you want to delete this transaction?')) {
+      try {
+        await deleteTransactionInFirebase(user.uid, id);
+      } catch (error) {
+        console.error("Error deleting transaction:", error);
+        alert("Failed to delete transaction. Please try again.");
+      }
+    }
+  };
+
+  const handleSetSpendingGoal = async (goal: number) => {
+    if (!user) return;
+
+    try {
+      await updateUserSettings(user.uid, { spendingGoal: goal });
+    } catch (error) {
+      console.error("Error updating spending goal:", error);
+      alert("Failed to update spending goal. Please try again.");
+    }
+  };
+
+  const handleAddCategory = async (c: Omit<Category, 'id'>) => {
+    if (!user) return;
+
+    try {
+      await saveCategory(user.uid, c);
+    } catch (error) {
+      console.error("Error adding category:", error);
+      alert("Failed to add category. Please try again.");
+    }
   };
 
   const startEditing = (t: Transaction) => {
@@ -146,14 +213,15 @@ const App: React.FC = () => {
 
       <main className="flex-1 overflow-y-auto pb-24 px-4 pt-4">
         {activeTab === 'home' && (
-          <Dashboard 
-            balance={balance} 
-            stats={currentMonthStats} 
-            recentTransactions={transactions.slice(0, 5)} 
+          <Dashboard
+            balance={balance}
+            stats={currentMonthStats}
+            recentTransactions={transactions.slice(0, 5)}
             categories={categories}
             spendingGoal={spendingGoal}
             setSpendingGoal={handleSetSpendingGoal}
             onEdit={startEditing}
+            isLoading={isDataLoading}
           />
         )}
         {activeTab === 'history' && (

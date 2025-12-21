@@ -29,10 +29,10 @@ const Account: React.FC<AccountProps> = ({ user }) => {
         <p className="text-gray-400 text-sm font-medium">{user.email}</p>
         
         <div className="mt-8 w-full flex gap-3">
-          <div className="flex-1 bg-emerald-50 p-4 rounded-3xl text-center">
+          {/* <div className="flex-1 bg-emerald-50 p-4 rounded-3xl text-center">
             <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Status</p>
             <p className="text-sm font-bold text-emerald-700">Premium</p>
-          </div>
+          </div> */}
           <div className="flex-1 bg-blue-50 p-4 rounded-3xl text-center">
             <p className="text-[10px] font-bold text-blue-600 uppercase mb-1">Joined</p>
             <p className="text-sm font-bold text-blue-700">
@@ -43,7 +43,7 @@ const Account: React.FC<AccountProps> = ({ user }) => {
       </div>
 
       <div className="space-y-3">
-        <button className="w-full bg-white p-5 rounded-3xl shadow-sm border border-gray-50 flex items-center justify-between group">
+        {/* <button className="w-full bg-white p-5 rounded-3xl shadow-sm border border-gray-50 flex items-center justify-between group">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-lg">⚙️</div>
             <span className="font-bold text-gray-700">Settings</span>
@@ -56,7 +56,7 @@ const Account: React.FC<AccountProps> = ({ user }) => {
             <span className="font-bold text-gray-700">Export Data</span>
           </div>
           <span className="text-gray-300 group-hover:translate-x-1 transition-transform">→</span>
-        </button>
+        </button> */}
         <button 
           onClick={handleLogout}
           className="w-full bg-red-50 p-5 rounded-3xl border border-red-100 flex items-center justify-between group mt-10"
