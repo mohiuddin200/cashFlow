@@ -30,8 +30,6 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency }) => {
 
   return (
     <div className="space-y-8 pb-20">
-      <h2 className="text-2xl font-bold text-gray-800">Account</h2>
-
       <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col items-center">
         <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-emerald-50 shadow-lg mb-6">
           <img 

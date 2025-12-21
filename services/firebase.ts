@@ -29,7 +29,7 @@ import {
 } from "firebase/firestore";
 import { getMessaging } from "firebase/messaging";
 import type { User } from "firebase/auth";
-import type { Transaction, Category, FinancialAdvice } from "../types";
+import type { Transaction, Category, FinancialAdvice, Loan, LoanPayment } from "../types";
 import { DEFAULT_CURRENCY } from "../constants";
 import { offlineSyncService } from "./offlineSync";
 
@@ -401,6 +401,216 @@ export const getLatestAdvice = async (userId: string): Promise<FinancialAdvice |
     console.error("Error getting latest advice:", error);
     return null;
   }
+};
+
+// Loan CRUD operations
+export const saveLoan = async (userId: string, loan: Omit<Loan, 'id'>, isOffline = false) => {
+  const isOnline = navigator.onLine;
+  const finalLoan = { ...loan, userId };
+
+  try {
+    // Always save to offline storage first
+    await offlineSyncService.init();
+    const savedLoan = await offlineSyncService.saveLoan(
+      { id: '', ...finalLoan } as Loan,
+      !isOnline || isOffline
+    );
+
+    // If online and not explicitly offline, sync with Firebase
+    if (isOnline && !isOffline) {
+      const loansCollection = collection(db, "users", userId, "loans");
+      const docRef = await addDoc(loansCollection, {
+        ...loan,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now()
+      });
+
+      // Update the offline record with the actual ID
+      const loanWithId = { id: docRef.id, ...finalLoan };
+      await offlineSyncService.saveLoan(loanWithId, false);
+
+      // Create initial transaction if loan is connected to money
+      if (loan.isConnectedToMoney) {
+        const transactionType = loan.direction === 'given' ? 'expense' : 'income';
+        const transactionNote = `Loan ${loan.direction === 'given' ? 'to' : 'from'} ${loan.personName}`;
+
+        await saveTransaction(userId, {
+          amount: loan.amount,
+          categoryId: loan.direction === 'given' ? 'loan-given' : 'loan-taken',
+          date: loan.date,
+          note: transactionNote,
+          type: transactionType
+        }, isOffline);
+      }
+
+      return loanWithId;
+    }
+
+    return savedLoan;
+  } catch (error) {
+    console.error("Error saving loan:", error);
+
+    // If Firebase fails but we're online, save to offline storage
+    if (isOnline && !isOffline) {
+      await offlineSyncService.init();
+      return await offlineSyncService.saveLoan(
+        { id: '', ...finalLoan } as Loan,
+        true
+      );
+    }
+
+    throw error;
+  }
+};
+
+export const updateLoan = async (userId: string, loanId: string, loan: Partial<Loan>, isOffline = false) => {
+  const isOnline = navigator.onLine;
+  const finalLoan = { ...loan, id: loanId, userId };
+
+  try {
+    // Always update offline storage first
+    await offlineSyncService.init();
+    await offlineSyncService.saveLoan(
+      finalLoan as Loan,
+      !isOnline || isOffline
+    );
+
+    // If online and not explicitly offline, sync with Firebase
+    if (isOnline && !isOffline) {
+      const loanDoc = doc(db, "users", userId, "loans", loanId);
+      await updateDoc(loanDoc, {
+        ...loan,
+        updatedAt: Timestamp.now()
+      });
+    }
+
+    return finalLoan;
+  } catch (error) {
+    console.error("Error updating loan:", error);
+
+    // If Firebase fails but we're online, save to offline storage
+    if (isOnline && !isOffline) {
+      await offlineSyncService.init();
+      await offlineSyncService.saveLoan(finalLoan as Loan, true);
+    }
+
+    throw error;
+  }
+};
+
+export const deleteLoan = async (userId: string, loanId: string, isOffline = false) => {
+  const isOnline = navigator.onLine;
+
+  try {
+    // Always update offline storage first
+    await offlineSyncService.init();
+    await offlineSyncService.deleteLoan(loanId, !isOnline || isOffline);
+
+    // If online and not explicitly offline, sync with Firebase
+    if (isOnline && !isOffline) {
+      const loanDoc = doc(db, "users", userId, "loans", loanId);
+      await deleteDoc(loanDoc);
+    }
+  } catch (error) {
+    console.error("Error deleting loan:", error);
+
+    // If Firebase fails but we're online, save to offline storage
+    if (isOnline && !isOffline) {
+      await offlineSyncService.init();
+      await offlineSyncService.deleteLoan(loanId, true);
+    }
+
+    throw error;
+  }
+};
+
+export const subscribeToLoans = (userId: string, callback: (loans: Loan[]) => void) => {
+  const loansCollection = collection(db, "users", userId, "loans");
+  const q = query(loansCollection, orderBy("date", "desc"));
+
+  return onSnapshot(q, (snapshot) => {
+    const loans: Loan[] = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        date: data.date instanceof Timestamp ? data.date.toDate().toISOString() : data.date,
+        dueDate: data.dueDate instanceof Timestamp ? data.dueDate.toDate().toISOString() : data.dueDate,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt
+      } as Loan;
+    });
+    callback(loans);
+  });
+};
+
+// Loan payment operations
+export const saveLoanPayment = async (userId: string, payment: Omit<LoanPayment, 'id'>, isOffline = false) => {
+  const isOnline = navigator.onLine;
+  const finalPayment = { ...payment, userId };
+
+  try {
+    // Always save to offline storage first
+    await offlineSyncService.init();
+    const savedPayment = await offlineSyncService.saveLoanPayment(
+      { id: '', ...finalPayment } as LoanPayment,
+      !isOnline || isOffline
+    );
+
+    // If online and not explicitly offline, sync with Firebase
+    if (isOnline && !isOffline) {
+      const paymentsCollection = collection(db, "users", userId, "loanPayments");
+      const docRef = await addDoc(paymentsCollection, {
+        ...payment,
+        createdAt: Timestamp.now()
+      });
+
+      // Update the offline record with the actual ID
+      const paymentWithId = { id: docRef.id, ...finalPayment };
+      await offlineSyncService.saveLoanPayment(paymentWithId, false);
+
+      // Create corresponding transaction if needed
+      // We would need to fetch the loan to determine if it's connected to money
+      // This will be handled in the component that calls this function
+
+      return paymentWithId;
+    }
+
+    return savedPayment;
+  } catch (error) {
+    console.error("Error saving loan payment:", error);
+
+    // If Firebase fails but we're online, save to offline storage
+    if (isOnline && !isOffline) {
+      await offlineSyncService.init();
+      return await offlineSyncService.saveLoanPayment(
+        { id: '', ...finalPayment } as LoanPayment,
+        true
+      );
+    }
+
+    throw error;
+  }
+};
+
+export const subscribeToLoanPayments = (userId: string, loanId: string, callback: (payments: LoanPayment[]) => void) => {
+  const paymentsCollection = collection(db, "users", userId, "loanPayments");
+  const q = query(paymentsCollection, orderBy("date", "desc"));
+
+  return onSnapshot(q, (snapshot) => {
+    const payments: LoanPayment[] = snapshot.docs
+      .map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          date: data.date instanceof Timestamp ? data.date.toDate().toISOString() : data.date,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt
+        } as LoanPayment;
+      })
+      .filter(payment => payment.loanId === loanId);
+    callback(payments);
+  });
 };
 
 export {

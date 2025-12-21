@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { Transaction, Category, MonthlyStats } from '../types';
+import { Transaction, Category, MonthlyStats, Loan } from '../types';
+import { formatCurrency } from '../utils/currency';
 
 interface DashboardProps {
   balance: number;
@@ -13,9 +14,10 @@ interface DashboardProps {
   onEdit: (t: Transaction) => void;
   isLoading?: boolean;
   currency?: string;
+  loans?: Loan[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransactions, transactions, categories, spendingGoal, setSpendingGoal, onEdit, isLoading = false, currency = 'BDT' }) => {
+const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransactions, transactions, categories, spendingGoal, setSpendingGoal, onEdit, isLoading = false, currency = 'BDT', loans = [] }) => {
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState(spendingGoal.toString());
 
@@ -99,6 +101,12 @@ const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransaction
   const remainingBudget = Math.max(spendingGoal - stats.expenses, 0);
   const dailyLimit = remainingBudget / daysLeft;
 
+  // Calculate loan statistics
+  const totalGivenOut = loans.filter(loan => loan.direction === 'given').reduce((sum, loan) => sum + loan.remainingAmount, 0);
+  const totalTakenIn = loans.filter(loan => loan.direction === 'taken').reduce((sum, loan) => sum + loan.remainingAmount, 0);
+  const activeLoans = loans.filter(loan => loan.status === 'active');
+  const overdueLoans = loans.filter(loan => loan.status === 'overdue');
+
   return (
     <div className="space-y-6">
       {/* Total Balance Card */}
@@ -130,6 +138,69 @@ const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransaction
           <p className="text-lg font-bold text-gray-800">{daysLeft} Days</p>
         </div>
       </div>
+
+      {/* Loan Summary Section */}
+      {loans.length > 0 && (
+        <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Loan Summary</h3>
+            <button
+              onClick={() => window.location.hash = '#loans'}
+              className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl uppercase transition-all active:scale-95"
+            >
+              Manage Loans
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="bg-red-50 p-4 rounded-2xl border border-red-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-lg">💸</span>
+                <span className="text-[10px] text-red-600 bg-red-100 px-2 py-1 rounded-full font-medium">
+                  Given Out
+                </span>
+              </div>
+              <p className="text-lg font-bold text-red-900">{formatCurrency(totalGivenOut, currency)}</p>
+              <p className="text-xs text-red-600 mt-1">Outstanding amount</p>
+            </div>
+
+            <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-lg">💰</span>
+                <span className="text-[10px] text-green-600 bg-green-100 px-2 py-1 rounded-full font-medium">
+                  Taken In
+                </span>
+              </div>
+              <p className="text-lg font-bold text-green-900">{formatCurrency(totalTakenIn, currency)}</p>
+              <p className="text-xs text-green-600 mt-1">Outstanding amount</p>
+            </div>
+          </div>
+
+          <div className="flex space-x-3">
+            <div className="flex-1 bg-orange-50 p-3 rounded-2xl border border-orange-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[9px] font-black text-orange-600 uppercase tracking-widest">Active Loans</p>
+                  <p className="text-lg font-bold text-orange-900">{activeLoans.length}</p>
+                </div>
+                <span className="text-xl">📊</span>
+              </div>
+            </div>
+
+            {overdueLoans.length > 0 && (
+              <div className="flex-1 bg-red-50 p-3 rounded-2xl border border-red-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[9px] font-black text-red-600 uppercase tracking-widest">Overdue</p>
+                    <p className="text-lg font-bold text-red-900">{overdueLoans.length}</p>
+                  </div>
+                  <span className="text-xl">⚠️</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Progress Section */}
       <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100">
