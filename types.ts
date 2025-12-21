@@ -41,3 +41,10 @@ export interface UserSettings {
   spendingGoal: number;
   currency: string;
 }
+
+export interface FinancialAdvice {
+  id: string;
+  content: string;
+  summary: string;
+  createdAt: string;
+}

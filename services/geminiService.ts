@@ -1,9 +1,7 @@
 import { Category } from "../types";
 
-// Use Vercel API route instead of direct DeepSeek API
-const API_ENDPOINT = import.meta.env.DEV 
-  ? 'http://localhost:3000/api/deepseek'  // Local development
-  : '/api/deepseek';  // Production Vercel
+// Use Vercel API route only in production
+const API_ENDPOINT = '/api/deepseek';
 
 async function callDeepSeek(model: string, messages: any[], temperature: number, response_format?: any) {
   const response = await fetch(API_ENDPOINT, {

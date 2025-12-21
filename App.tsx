@@ -328,6 +328,7 @@ const App: React.FC = () => {
             categories={categories}
             spendingGoal={spendingGoal}
             currency={currency}
+            user={user}
           />
         )}
         {activeTab === 'account' && (

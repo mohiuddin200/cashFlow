@@ -346,6 +346,39 @@ export const initializeOfflineSync = async () => {
   }
 };
 
+// Financial advice operations
+export const saveFinancialAdvice = async (userId: string, advice: { content: string; summary: string }) => {
+  try {
+    const adviceCollection = collection(db, "users", userId, "advice");
+    const docRef = await addDoc(adviceCollection, {
+      ...advice,
+      createdAt: Timestamp.now()
+    });
+    return {
+      id: docRef.id,
+      ...advice,
+      createdAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error("Error saving financial advice:", error);
+    throw error;
+  }
+};
+
+export const subscribeToAdviceHistory = (userId: string, callback: (advice: any[]) => void) => {
+  const adviceCollection = collection(db, "users", userId, "advice");
+  const q = query(adviceCollection, orderBy("createdAt", "desc"), limit(10));
+
+  return onSnapshot(q, (snapshot) => {
+    const advice = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
+    }));
+    callback(advice);
+  });
+};
+
 export {
   signInWithPopup,
   signInWithEmailAndPassword,
