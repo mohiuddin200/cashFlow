@@ -40,4 +40,4 @@ export const CURRENCIES: Currency[] = [
   { code: 'THB', name: 'Thai Baht', symbol: '฿', flag: '🇹🇭' }
 ];
 
-export const DEFAULT_CURRENCY = 'USD';
+export const DEFAULT_CURRENCY = 'BDT';

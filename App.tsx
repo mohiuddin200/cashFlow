@@ -9,6 +9,8 @@ import CategoryManager from './components/CategoryManager';
 import AIInsights from './components/AIInsights';
 import Account from './components/Account';
 import Auth from './components/Auth';
+import InstallPrompt from './components/InstallPrompt';
+import OfflineIndicator from './components/OfflineIndicator';
 import {
   auth,
   onAuthStateChanged,
@@ -21,8 +23,10 @@ import {
   updateUserSettings,
   initializeUserDocument,
   saveCategory,
-  subscribeToUserSettings
+  subscribeToUserSettings,
+  initializeOfflineSync
 } from './services/firebase';
+import { useNotifications } from './services/notifications';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -34,6 +38,34 @@ const App: React.FC = () => {
   const [spendingGoal, setSpendingGoal] = useState<number>(20000);
   const [currency, setCurrency] = useState<string>(DEFAULT_CURRENCY);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  // Initialize PWA features and notifications
+  const { initializeNotifications, cleanup } = useNotifications();
+
+  // Initialize PWA services on app start
+  useEffect(() => {
+    const initPWA = async () => {
+      try {
+        // Initialize offline sync service
+        await initializeOfflineSync();
+
+        // Initialize push notifications (only if user is logged in)
+        if (user) {
+          await initializeNotifications();
+        }
+      } catch (error) {
+        console.error('Error initializing PWA features:', error);
+      }
+    };
+
+    initPWA();
+
+    return () => {
+      if (cleanup) {
+        cleanup();
+      }
+    };
+  }, [user, initializeNotifications, cleanup]);
 
   // Auth State Listener
   useEffect(() => {
@@ -210,20 +242,25 @@ const App: React.FC = () => {
   if (!user) return <Auth />;
 
   return (
-    <div className="flex flex-col h-screen max-w-md mx-auto bg-gray-50 overflow-hidden safe-top">
-      <header className="px-6 py-4 bg-white border-b flex justify-between items-center shrink-0">
-        <h1 className="text-xl font-bold text-emerald-600 tracking-tight">CashFlow</h1>
-        <button 
-          onClick={() => setActiveTab('account')}
-          className="w-8 h-8 rounded-xl overflow-hidden border border-emerald-100 shadow-sm"
-        >
-          <img 
-            src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=10b981&color=fff`} 
-            alt="Profile" 
-            className="w-full h-full object-cover"
-          />
-        </button>
-      </header>
+    <>
+      {/* PWA Components */}
+      <InstallPrompt />
+      <OfflineIndicator />
+
+      <div className="flex flex-col h-screen max-w-md mx-auto bg-gray-50 overflow-hidden safe-top">
+        <header className="px-6 py-4 bg-white border-b flex justify-between items-center shrink-0">
+          <h1 className="text-xl font-bold text-emerald-600 tracking-tight">CashFlow</h1>
+          <button
+            onClick={() => setActiveTab('account')}
+            className="w-8 h-8 rounded-xl overflow-hidden border border-emerald-100 shadow-sm"
+          >
+            <img
+              src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=10b981&color=fff`}
+              alt="Profile"
+              className="w-full h-full object-cover"
+            />
+          </button>
+        </header>
 
       <main className="flex-1 overflow-y-auto pb-24 px-4 pt-4">
         {activeTab === 'home' && (
@@ -231,19 +268,22 @@ const App: React.FC = () => {
             balance={balance}
             stats={currentMonthStats}
             recentTransactions={transactions.slice(0, 5)}
+            transactions={transactions}
             categories={categories}
             spendingGoal={spendingGoal}
             setSpendingGoal={handleSetSpendingGoal}
             onEdit={startEditing}
             isLoading={isDataLoading}
+            currency={currency}
           />
         )}
         {activeTab === 'history' && (
-          <TransactionList 
-            transactions={transactions} 
-            categories={categories} 
+          <TransactionList
+            transactions={transactions}
+            categories={categories}
             onDelete={deleteTransaction}
             onEdit={startEditing}
+            currency={currency}
           />
         )}
         {activeTab === 'add' && (
@@ -264,11 +304,12 @@ const App: React.FC = () => {
           />
         )}
         {activeTab === 'insights' && (
-          <AIInsights 
-            transactions={transactions} 
+          <AIInsights
+            transactions={transactions}
             stats={currentMonthStats}
             categories={categories}
             spendingGoal={spendingGoal}
+            currency={currency}
           />
         )}
         {activeTab === 'account' && (
@@ -292,7 +333,8 @@ const App: React.FC = () => {
           <NavButton active={activeTab === 'account'} onClick={() => setActiveTab('account')} icon="👤" label="Me" />
         </div>
       </nav>
-    </div>
+      </div>
+    </>
   );
 };
 

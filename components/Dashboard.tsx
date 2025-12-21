@@ -6,24 +6,79 @@ interface DashboardProps {
   balance: number;
   stats: MonthlyStats;
   recentTransactions: Transaction[];
+  transactions: Transaction[];
   categories: Category[];
   spendingGoal: number;
   setSpendingGoal: (goal: number) => void;
   onEdit: (t: Transaction) => void;
   isLoading?: boolean;
+  currency?: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransactions, categories, spendingGoal, setSpendingGoal, onEdit, isLoading = false }) => {
+const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransactions, transactions, categories, spendingGoal, setSpendingGoal, onEdit, isLoading = false, currency = 'BDT' }) => {
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState(spendingGoal.toString());
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('en-BD', { 
-      style: 'currency', 
-      currency: 'BDT',
+    const localeMap: { [key: string]: string } = {
+      'USD': 'en-US',
+      'EUR': 'de-DE',
+      'GBP': 'en-GB',
+      'JPY': 'ja-JP',
+      'BDT': 'en-BD',
+      'INR': 'en-IN',
+      'TRY': 'tr-TR',
+      'CAD': 'en-CA',
+      'AUD': 'en-AU',
+      'CHF': 'de-CH',
+      'CNY': 'zh-CN',
+      'PKR': 'en-PK',
+      'SAR': 'ar-SA',
+      'AED': 'ar-AE',
+      'BRL': 'pt-BR',
+      'RUB': 'ru-RU',
+      'KRW': 'ko-KR',
+      'SGD': 'en-SG',
+      'MYR': 'en-MY',
+      'THB': 'th-TH'
+    };
+
+    const symbolMap: { [key: string]: string } = {
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'BDT': '৳',
+      'INR': '₹',
+      'TRY': '₺',
+      'CAD': 'C$',
+      'AUD': 'A$',
+      'CHF': 'Fr',
+      'CNY': '¥',
+      'PKR': '₨',
+      'SAR': '﷼',
+      'AED': 'د.إ',
+      'BRL': 'R$',
+      'RUB': '₽',
+      'KRW': '₩',
+      'SGD': 'S$',
+      'MYR': 'RM',
+      'THB': '฿'
+    };
+
+    const locale = localeMap[currency] || 'en-US';
+    const symbol = symbolMap[currency] || '$';
+
+    // For currencies like JPY, KRW, etc. that don't use decimal places
+    const noDecimalCurrencies = ['JPY', 'KRW', 'CLP', 'ISK', 'VND'];
+    const minimumFractionDigits = noDecimalCurrencies.includes(currency) ? 0 : 0;
+
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currency,
       currencyDisplay: 'symbol',
-      minimumFractionDigits: 0
-    }).format(val).replace('BDT', '৳');
+      minimumFractionDigits
+    }).format(val).replace(/[A-Z]{3}/, symbol);
   };
 
   const handleGoalSubmit = (e: React.FormEvent) => {

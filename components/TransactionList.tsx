@@ -7,15 +7,66 @@ interface TransactionListProps {
   categories: Category[];
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
+  currency?: string;
 }
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, categories, onDelete, onEdit }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ transactions, categories, onDelete, onEdit, currency = 'BDT' }) => {
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('en-IN', { 
-      style: 'currency', 
-      currency: 'BDT',
-      currencyDisplay: 'symbol'
-    }).format(val);
+    const localeMap: { [key: string]: string } = {
+      'USD': 'en-US',
+      'EUR': 'de-DE',
+      'GBP': 'en-GB',
+      'JPY': 'ja-JP',
+      'BDT': 'en-BD',
+      'INR': 'en-IN',
+      'TRY': 'tr-TR',
+      'CAD': 'en-CA',
+      'AUD': 'en-AU',
+      'CHF': 'de-CH',
+      'CNY': 'zh-CN',
+      'PKR': 'en-PK',
+      'SAR': 'ar-SA',
+      'AED': 'ar-AE',
+      'BRL': 'pt-BR',
+      'RUB': 'ru-RU',
+      'KRW': 'ko-KR',
+      'SGD': 'en-SG',
+      'MYR': 'en-MY',
+      'THB': 'th-TH'
+    };
+
+    const symbolMap: { [key: string]: string } = {
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'BDT': '৳',
+      'INR': '₹',
+      'TRY': '₺',
+      'CAD': 'C$',
+      'AUD': 'A$',
+      'CHF': 'Fr',
+      'CNY': '¥',
+      'PKR': '₨',
+      'SAR': '﷼',
+      'AED': 'د.إ',
+      'BRL': 'R$',
+      'RUB': '₽',
+      'KRW': '₩',
+      'SGD': 'S$',
+      'MYR': 'RM',
+      'THB': '฿'
+    };
+
+    const locale = localeMap[currency] || 'en-US';
+    const symbol = symbolMap[currency] || '$';
+
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currency,
+      currencyDisplay: 'symbol',
+      minimumFractionDigits: 0
+    }).format(val).replace(/[A-Z]{3}/, symbol);
   };
 
   const grouped = transactions.reduce((groups, t) => {
