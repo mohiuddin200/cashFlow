@@ -41,10 +41,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
     if (result) {
       if (result.type) setType(result.type);
       if (result.amount) setAmount(result.amount.toString());
-      if (result.note) setNote(result.note);
-      
-      const cat = categories.find(c => 
-        c.name.toLowerCase() === result.categoryName?.toLowerCase() && 
+
+      // Use AI-generated title for both note and input field
+      if (result.note) {
+        setNote(result.note);
+        // Update the input field with the AI-generated clean title
+        setAiInput(result.note);
+      }
+
+      const cat = categories.find(c =>
+        c.name.toLowerCase() === result.categoryName?.toLowerCase() &&
         c.type === (result.type || type)
       );
       if (cat) setCategoryId(cat.id);

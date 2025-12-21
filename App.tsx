@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, Category } from './types';
-import { DEFAULT_CATEGORIES } from './constants';
+import { DEFAULT_CATEGORIES, DEFAULT_CURRENCY } from './constants';
 import Dashboard from './components/Dashboard';
 import TransactionList from './components/TransactionList';
 import TransactionForm from './components/TransactionForm';
@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [spendingGoal, setSpendingGoal] = useState<number>(20000);
+  const [currency, setCurrency] = useState<string>(DEFAULT_CURRENCY);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   // Auth State Listener
@@ -49,6 +50,7 @@ const App: React.FC = () => {
       setTransactions([]);
       setCategories(DEFAULT_CATEGORIES);
       setSpendingGoal(20000);
+      setCurrency(DEFAULT_CURRENCY);
       setIsDataLoading(false);
       return;
     }
@@ -90,6 +92,7 @@ const App: React.FC = () => {
     // Subscribe to user settings
     const unsubscribeUserSettings = subscribeToUserSettings(user.uid, (settings) => {
       setSpendingGoal(settings.spendingGoal);
+      setCurrency(settings.currency);
       hasLoadedSettings = true;
       checkIfAllLoaded();
     });
@@ -166,6 +169,17 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Error adding category:", error);
       alert("Failed to add category. Please try again.");
+    }
+  };
+
+  const handleSetCurrency = async (newCurrency: string) => {
+    if (!user) return;
+
+    try {
+      await updateUserSettings(user.uid, { currency: newCurrency });
+    } catch (error) {
+      console.error("Error updating currency:", error);
+      alert("Failed to update currency. Please try again.");
     }
   };
 
@@ -258,7 +272,7 @@ const App: React.FC = () => {
           />
         )}
         {activeTab === 'account' && (
-          <Account user={user} />
+          <Account user={user} currency={currency} setCurrency={handleSetCurrency} />
         )}
       </main>
 

@@ -1,16 +1,31 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { auth, signOut, User } from '../services/firebase';
+import { CURRENCIES } from '../constants';
+import { Currency } from '../types';
 
 interface AccountProps {
   user: User;
+  currency: string;
+  setCurrency: (currency: string) => void;
 }
 
-const Account: React.FC<AccountProps> = ({ user }) => {
+const Account: React.FC<AccountProps> = ({ user, currency, setCurrency }) => {
+  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
+
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to sign out?')) {
       await signOut(auth);
     }
+  };
+
+  const getCurrentCurrency = () => {
+    return CURRENCIES.find(c => c.code === currency) || CURRENCIES[0];
+  };
+
+  const handleCurrencyChange = async (newCurrency: string) => {
+    setCurrency(newCurrency);
+    setIsCurrencyModalOpen(false);
   };
 
   return (
@@ -41,6 +56,62 @@ const Account: React.FC<AccountProps> = ({ user }) => {
           </div>
         </div>
       </div>
+
+      {/* Currency Settings */}
+      <div className="bg-white p-6 rounded-[40px] shadow-sm border border-gray-50">
+        <button
+          onClick={() => setIsCurrencyModalOpen(true)}
+          className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-3xl hover:bg-gray-100 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="text-2xl">{getCurrentCurrency().flag}</div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-gray-800">Currency</p>
+              <p className="text-xs text-gray-500">{getCurrentCurrency().name} ({getCurrentCurrency().symbol})</p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+      </div>
+
+      {/* Currency Modal */}
+      {isCurrencyModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 safe-top safe-bottom">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Select Currency</h3>
+            <div className="space-y-2">
+              {CURRENCIES.map((currencyOption) => (
+                <button
+                  key={currencyOption.code}
+                  onClick={() => handleCurrencyChange(currencyOption.code)}
+                  className={`w-full flex items-center justify-between p-3 rounded-2xl transition-colors ${
+                    currency === currencyOption.code
+                      ? 'bg-emerald-50 border border-emerald-200'
+                      : 'bg-gray-50 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{currencyOption.flag}</span>
+                    <div className="text-left">
+                      <p className="font-semibold text-gray-800">{currencyOption.name}</p>
+                      <p className="text-xs text-gray-500">{currencyOption.code} • {currencyOption.symbol}</p>
+                    </div>
+                  </div>
+                  {currency === currencyOption.code && (
+                    <span className="text-emerald-600 text-xl">✓</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setIsCurrencyModalOpen(false)}
+              className="w-full mt-6 p-4 bg-gray-100 text-gray-700 font-semibold rounded-2xl hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-3">
         {/* <button className="w-full bg-white p-5 rounded-3xl shadow-sm border border-gray-50 flex items-center justify-between group">

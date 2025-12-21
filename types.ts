@@ -29,3 +29,15 @@ export interface MonthlyStats {
   expenses: number;
   net: number;
 }
+
+export interface Currency {
+  code: string;
+  name: string;
+  symbol: string;
+  flag: string;
+}
+
+export interface UserSettings {
+  spendingGoal: number;
+  currency: string;
+}

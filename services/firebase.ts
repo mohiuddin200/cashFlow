@@ -25,6 +25,7 @@ import {
 } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import type { Transaction, Category } from "../types";
+import { DEFAULT_CURRENCY } from "../constants";
 
 // Your Firebase credentials
 const firebaseConfig = {
@@ -136,7 +137,7 @@ export const subscribeToCategories = (userId: string, callback: (categories: Cat
 };
 
 // User settings operations
-export const updateUserSettings = async (userId: string, settings: { spendingGoal?: number }) => {
+export const updateUserSettings = async (userId: string, settings: { spendingGoal?: number; currency?: string }) => {
   try {
     const userDoc = doc(db, "users", userId);
     await updateDoc(userDoc, {
@@ -149,14 +150,15 @@ export const updateUserSettings = async (userId: string, settings: { spendingGoa
   }
 };
 
-export const subscribeToUserSettings = (userId: string, callback: (settings: { spendingGoal: number }) => void) => {
+export const subscribeToUserSettings = (userId: string, callback: (settings: { spendingGoal: number; currency: string }) => void) => {
   const userDoc = doc(db, "users", userId);
 
   return onSnapshot(userDoc, (snapshot) => {
     if (snapshot.exists()) {
       const data = snapshot.data();
       callback({
-        spendingGoal: data.spendingGoal || 20000
+        spendingGoal: data.spendingGoal || 20000,
+        currency: data.currency || DEFAULT_CURRENCY
       });
     }
   });
