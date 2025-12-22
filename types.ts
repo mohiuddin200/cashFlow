@@ -16,6 +16,7 @@ export interface Transaction {
   date: string;
   note: string;
   type: TransactionType;
+  loanId?: string; // Links transaction to a loan if created from one
 }
 
 export interface AppState {
@@ -89,6 +90,7 @@ export interface UserSettings {
   spendingGoal: number;
   currency: string;
   loanSettings: LoanSettings;
+  carryForwardEnabled: boolean;
 }
 
 export interface AppState {

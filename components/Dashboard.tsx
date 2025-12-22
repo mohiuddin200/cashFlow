@@ -15,9 +15,29 @@ interface DashboardProps {
   isLoading?: boolean;
   currency?: string;
   loans?: Loan[];
+  selectedMonth: Date;
+  setSelectedMonth: (date: Date) => void;
+  availableMonths: Date[];
+  carryForwardEnabled: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransactions, transactions, categories, spendingGoal, setSpendingGoal, onEdit, isLoading = false, currency = 'BDT', loans = [] }) => {
+const Dashboard: React.FC<DashboardProps> = ({
+  balance,
+  stats,
+  recentTransactions,
+  transactions,
+  categories,
+  spendingGoal,
+  setSpendingGoal,
+  onEdit,
+  isLoading = false,
+  currency = 'BDT',
+  loans = [],
+  selectedMonth,
+  setSelectedMonth,
+  availableMonths,
+  carryForwardEnabled
+}) => {
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState(spendingGoal.toString());
 
@@ -109,6 +129,59 @@ const Dashboard: React.FC<DashboardProps> = ({ balance, stats, recentTransaction
 
   return (
     <div className="space-y-6">
+      {/* Month Selector */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => {
+              const currentIndex = availableMonths.findIndex(
+                m => m.getMonth() === selectedMonth.getMonth() &&
+                     m.getFullYear() === selectedMonth.getFullYear()
+              );
+              if (currentIndex < availableMonths.length - 1) {
+                setSelectedMonth(availableMonths[currentIndex + 1]);
+              }
+            }}
+            disabled={availableMonths.findIndex(
+              m => m.getMonth() === selectedMonth.getMonth() &&
+                   m.getFullYear() === selectedMonth.getFullYear()
+            ) === availableMonths.length - 1}
+            className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            ←
+          </button>
+
+          <div className="text-center">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Viewing</p>
+            <p className="text-lg font-bold text-gray-800">
+              {selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </p>
+            {carryForwardEnabled && (
+              <p className="text-[9px] text-emerald-600 font-medium">With carry-forward</p>
+            )}
+          </div>
+
+          <button
+            onClick={() => {
+              const currentIndex = availableMonths.findIndex(
+                m => m.getMonth() === selectedMonth.getMonth() &&
+                     m.getFullYear() === selectedMonth.getFullYear()
+              );
+              if (currentIndex > 0) {
+                setSelectedMonth(availableMonths[currentIndex - 1]);
+              }
+            }}
+            disabled={availableMonths.findIndex(
+              m => m.getMonth() === selectedMonth.getMonth() &&
+                   m.getFullYear() === selectedMonth.getFullYear()
+            ) === 0}
+            className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            →
+          </button>
+        </div>
+      </div>
+
       {/* Total Balance Card */}
       <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[32px] p-7 text-white shadow-2xl relative overflow-hidden">
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>

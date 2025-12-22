@@ -51,9 +51,9 @@ interface OfflineDB extends DBSchema {
     };
   };
   syncQueue: {
-    key: string;
+    key: number;
     value: {
-      id: string;
+      id?: number;
       operation: 'create' | 'update' | 'delete';
       type: 'transaction' | 'category' | 'loan' | 'loanPayment';
       data: any;
@@ -239,6 +239,22 @@ class OfflineSyncService {
       });
     }
 
+    // Also delete any transactions linked to this loan
+    const allTransactions = await this.getTransactions();
+    for (const tx of allTransactions) {
+      if (tx.data.loanId === loanId) {
+        await this.db!.delete('transactions', tx.data.id);
+        // Also add to sync queue if offline
+        if (isOffline) {
+          await this.addToSyncQueue({
+            operation: 'delete',
+            type: 'transaction',
+            data: { id: tx.data.id },
+          });
+        }
+      }
+    }
+
     await this.db!.delete('loans', loanId);
   }
 
@@ -291,7 +307,7 @@ class OfflineSyncService {
   }
 
   // Sync queue methods
-  private async addToSyncQueue(item: Omit<OfflineDB['syncQueue']['value'], 'id' | 'timestamp'>) {
+  private async addToSyncQueue(item: Omit<OfflineDB['syncQueue']['value'], 'timestamp'>) {
     if (!this.db) await this.init();
 
     await this.db!.add('syncQueue', {

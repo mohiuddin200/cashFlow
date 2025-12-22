@@ -8,9 +8,10 @@ interface TransactionListProps {
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
   currency?: string;
+  selectedMonth?: Date;
 }
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, categories, onDelete, onEdit, currency = 'BDT' }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ transactions, categories, onDelete, onEdit, currency = 'BDT', selectedMonth }) => {
   const formatCurrency = (val: number) => {
     const localeMap: { [key: string]: string } = {
       'USD': 'en-US',
@@ -69,7 +70,17 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
     }).format(val).replace(/[A-Z]{3}/, symbol);
   };
 
-  const grouped = transactions.reduce((groups, t) => {
+  // Filter transactions by selected month
+  const filteredTransactions = selectedMonth
+    ? transactions.filter(t => {
+        const tDate = new Date(t.date);
+        const monthStart = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+        const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+        return tDate >= monthStart && tDate <= monthEnd;
+      })
+    : transactions;
+
+  const grouped = filteredTransactions.reduce((groups, t) => {
     const date = t.date;
     if (!groups[date]) groups[date] = [];
     groups[date].push(t);

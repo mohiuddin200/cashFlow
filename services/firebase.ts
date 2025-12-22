@@ -274,7 +274,7 @@ export const subscribeToCategories = (userId: string, callback: (categories: Cat
 };
 
 // User settings operations
-export const updateUserSettings = async (userId: string, settings: { spendingGoal?: number; currency?: string }) => {
+export const updateUserSettings = async (userId: string, settings: { spendingGoal?: number; currency?: string; carryForwardEnabled?: boolean }) => {
   try {
     const userDoc = doc(db, "users", userId);
     await updateDoc(userDoc, {
@@ -287,7 +287,7 @@ export const updateUserSettings = async (userId: string, settings: { spendingGoa
   }
 };
 
-export const subscribeToUserSettings = (userId: string, callback: (settings: { spendingGoal: number; currency: string }) => void) => {
+export const subscribeToUserSettings = (userId: string, callback: (settings: { spendingGoal: number; currency: string; carryForwardEnabled: boolean }) => void) => {
   const userDoc = doc(db, "users", userId);
 
   return onSnapshot(userDoc, (snapshot) => {
@@ -295,13 +295,15 @@ export const subscribeToUserSettings = (userId: string, callback: (settings: { s
       const data = snapshot.data();
       callback({
         spendingGoal: data.spendingGoal || 20000,
-        currency: data.currency || DEFAULT_CURRENCY
+        currency: data.currency || DEFAULT_CURRENCY,
+        carryForwardEnabled: data.carryForwardEnabled ?? true
       });
     } else {
       // If document doesn't exist, call with default values
       callback({
         spendingGoal: 20000,
-        currency: DEFAULT_CURRENCY
+        currency: DEFAULT_CURRENCY,
+        carryForwardEnabled: true
       });
     }
   });
@@ -319,6 +321,7 @@ export const initializeUserDocument = async (userId: string, email?: string) => 
         email,
         spendingGoal: 20000,
         currency: DEFAULT_CURRENCY,
+        carryForwardEnabled: true,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now()
       });
@@ -439,7 +442,8 @@ export const saveLoan = async (userId: string, loan: Omit<Loan, 'id'>, isOffline
           categoryId: loan.direction === 'given' ? 'loan-given' : 'loan-taken',
           date: loan.date,
           note: transactionNote,
-          type: transactionType
+          type: transactionType,
+          loanId: docRef.id // Link transaction to this loan
         }, isOffline);
       }
 
@@ -508,6 +512,20 @@ export const deleteLoan = async (userId: string, loanId: string, isOffline = fal
 
     // If online and not explicitly offline, sync with Firebase
     if (isOnline && !isOffline) {
+      // First, find and delete any associated transactions
+      const transactionsCollection = collection(db, "users", userId, "transactions");
+      const q = query(transactionsCollection, orderBy("date", "desc"));
+      const querySnapshot = await getDocs(q);
+
+      for (const doc of querySnapshot.docs) {
+        const transaction = doc.data();
+        if (transaction.loanId === loanId) {
+          // Delete this transaction as it's linked to the loan being deleted
+          await deleteDoc(doc.ref);
+        }
+      }
+
+      // Then delete the loan itself
       const loanDoc = doc(db, "users", userId, "loans", loanId);
       await deleteDoc(loanDoc);
     }
@@ -611,6 +629,54 @@ export const subscribeToLoanPayments = (userId: string, loanId: string, callback
       .filter(payment => payment.loanId === loanId);
     callback(payments);
   });
+};
+
+// Delete all user data
+export const deleteAllUserData = async (userId: string) => {
+  try {
+    // Delete all transactions
+    const transactionsCollection = collection(db, "users", userId, "transactions");
+    const transactionsSnapshot = await getDocs(transactionsCollection);
+    for (const doc of transactionsSnapshot.docs) {
+      await deleteDoc(doc.ref);
+    }
+
+    // Delete all categories
+    const categoriesCollection = collection(db, "users", userId, "categories");
+    const categoriesSnapshot = await getDocs(categoriesCollection);
+    for (const doc of categoriesSnapshot.docs) {
+      await deleteDoc(doc.ref);
+    }
+
+    // Delete all loans
+    const loansCollection = collection(db, "users", userId, "loans");
+    const loansSnapshot = await getDocs(loansCollection);
+    for (const doc of loansSnapshot.docs) {
+      await deleteDoc(doc.ref);
+    }
+
+    // Delete all loan payments
+    const paymentsCollection = collection(db, "users", userId, "loanPayments");
+    const paymentsSnapshot = await getDocs(paymentsCollection);
+    for (const doc of paymentsSnapshot.docs) {
+      await deleteDoc(doc.ref);
+    }
+
+    // Delete all advice
+    const adviceCollection = collection(db, "users", userId, "advice");
+    const adviceSnapshot = await getDocs(adviceCollection);
+    for (const doc of adviceSnapshot.docs) {
+      await deleteDoc(doc.ref);
+    }
+
+    // Clear offline data
+    await offlineSyncService.clearOfflineData();
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting user data:", error);
+    throw error;
+  }
 };
 
 export {

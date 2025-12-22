@@ -33,6 +33,11 @@ import {
   saveLoanPayment,
 } from "./services/firebase";
 import { useNotifications } from "./services/notifications";
+import {
+  calculateMonthBalanceWithCarryForward,
+  getAvailableMonths,
+  getRecentTransactionsForMonth,
+} from "./utils/monthCalculations";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -45,6 +50,8 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [spendingGoal, setSpendingGoal] = useState<number>(20000);
   const [currency, setCurrency] = useState<string>(DEFAULT_CURRENCY);
+  const [carryForwardEnabled, setCarryForwardEnabled] = useState<boolean>(true);
+  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
 
@@ -185,6 +192,7 @@ const App: React.FC = () => {
       (settings) => {
         setSpendingGoal(settings.spendingGoal);
         setCurrency(settings.currency);
+        setCarryForwardEnabled(settings.carryForwardEnabled);
         hasLoadedSettings = true;
         checkIfAllLoaded();
       }
@@ -284,6 +292,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSetCarryForward = async (enabled: boolean) => {
+    if (!user) return;
+
+    try {
+      await updateUserSettings(user.uid, { carryForwardEnabled: enabled });
+    } catch (error) {
+      console.error("Error updating carry-forward setting:", error);
+      alert("Failed to update setting. Please try again.");
+    }
+  };
+
   const startEditing = (t: Transaction) => {
     setEditingTransaction(t);
     setActiveTab("add");
@@ -379,42 +398,32 @@ const App: React.FC = () => {
   };
 
   const balance = useMemo(() => {
-    const transactionBalance = transactions.reduce((acc, t) => {
-      return t.type === "income" ? acc + t.amount : acc - t.amount;
-    }, 0);
-
-    // Add loan adjustments for connected loans
-    const loanAdjustment = loans.reduce((acc, loan) => {
-      if (!loan.isConnectedToMoney) return acc;
-
-      if (loan.direction === "given") {
-        // Money given out reduces available balance
-        return acc - loan.amount + loan.totalPaid;
-      } else {
-        // Money taken increases available balance
-        return acc + loan.amount - loan.totalPaid;
-      }
-    }, 0);
-
-    return transactionBalance + loanAdjustment;
-  }, [transactions, loans]);
+    const balanceData = calculateMonthBalanceWithCarryForward(
+      transactions,
+      loans,
+      selectedMonth,
+      carryForwardEnabled
+    );
+    return balanceData.balance;
+  }, [transactions, loans, selectedMonth, carryForwardEnabled]);
 
   const currentMonthStats = useMemo(() => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthlyTransactions = transactions.filter(
-      (t) => new Date(t.date) >= startOfMonth
+    const balanceData = calculateMonthBalanceWithCarryForward(
+      transactions,
+      loans,
+      selectedMonth,
+      carryForwardEnabled
     );
+    return balanceData.stats;
+  }, [transactions, loans, selectedMonth, carryForwardEnabled]);
 
-    const income = monthlyTransactions
-      .filter((t) => t.type === "income")
-      .reduce((a, b) => a + b.amount, 0);
-    const expenses = monthlyTransactions
-      .filter((t) => t.type === "expense")
-      .reduce((a, b) => a + b.amount, 0);
-
-    return { income, expenses, net: income - expenses };
+  const availableMonths = useMemo(() => {
+    return getAvailableMonths(transactions);
   }, [transactions]);
+
+  const recentTransactionsForMonth = useMemo(() => {
+    return getRecentTransactionsForMonth(transactions, selectedMonth, 5);
+  }, [transactions, selectedMonth]);
 
   if (isAuthLoading)
     return (
@@ -456,7 +465,7 @@ const App: React.FC = () => {
             <Dashboard
               balance={balance}
               stats={currentMonthStats}
-              recentTransactions={transactions.slice(0, 5)}
+              recentTransactions={recentTransactionsForMonth}
               transactions={transactions}
               categories={categories}
               spendingGoal={spendingGoal}
@@ -465,6 +474,10 @@ const App: React.FC = () => {
               isLoading={isDataLoading}
               currency={currency}
               loans={loans}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              availableMonths={availableMonths}
+              carryForwardEnabled={carryForwardEnabled}
             />
           )}
           {activeTab === "history" && (
@@ -474,6 +487,7 @@ const App: React.FC = () => {
               onDelete={deleteTransaction}
               onEdit={startEditing}
               currency={currency}
+              selectedMonth={selectedMonth}
             />
           )}
           {activeTab === "add" && (
@@ -582,6 +596,8 @@ const App: React.FC = () => {
                   user={user}
                   currency={currency}
                   setCurrency={handleSetCurrency}
+                  carryForwardEnabled={carryForwardEnabled}
+                  setCarryForward={handleSetCarryForward}
                 />
               </div>
             </div>

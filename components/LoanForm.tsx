@@ -59,7 +59,6 @@ const LoanForm: React.FC<LoanFormProps> = ({ onSubmit, onCancel, initialData, cu
       amount: parseFloat(formData.amount),
       direction: formData.direction,
       date: formData.date,
-      dueDate: formData.dueDate || undefined,
       note: formData.note.trim(),
       isConnectedToMoney: formData.isConnectedToMoney,
       totalPaid: initialData?.totalPaid || 0,
@@ -68,6 +67,11 @@ const LoanForm: React.FC<LoanFormProps> = ({ onSubmit, onCancel, initialData, cu
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+
+    // Only include dueDate if it has a value
+    if (formData.dueDate) {
+      (loanData as any).dueDate = formData.dueDate;
+    }
 
     onSubmit(loanData);
   };

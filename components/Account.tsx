@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { auth, signOut, User } from '../services/firebase';
+import { auth, signOut, User, deleteAllUserData } from '../services/firebase';
 import { CURRENCIES } from '../constants';
 import { Currency } from '../types';
 
@@ -8,14 +8,38 @@ interface AccountProps {
   user: User;
   currency: string;
   setCurrency: (currency: string) => void;
+  carryForwardEnabled: boolean;
+  setCarryForward: (enabled: boolean) => void;
 }
 
-const Account: React.FC<AccountProps> = ({ user, currency, setCurrency }) => {
+const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryForwardEnabled, setCarryForward }) => {
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
+  const [isMonthSettingsModalOpen, setIsMonthSettingsModalOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to sign out?')) {
       await signOut(auth);
+    }
+  };
+
+  const handleResetData = async () => {
+    const confirmation = window.prompt(
+      'Type "DELETE" to confirm you want to permanently delete ALL your data including transactions, loans, and categories. This action cannot be undone!'
+    );
+
+    if (confirmation === 'DELETE') {
+      setIsResetting(true);
+      try {
+        await deleteAllUserData(user.uid);
+        window.location.reload(); // Reload to refresh the app with cleared data
+      } catch (error) {
+        console.error('Error resetting data:', error);
+        alert('Failed to reset data. Please try again.');
+        setIsResetting(false);
+      }
+    } else if (confirmation !== null) {
+      alert('Please type "DELETE" exactly to confirm.');
     }
   };
 
@@ -26,6 +50,11 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency }) => {
   const handleCurrencyChange = async (newCurrency: string) => {
     setCurrency(newCurrency);
     setIsCurrencyModalOpen(false);
+  };
+
+  const handleToggleCarryForward = async () => {
+    const newValue = !carryForwardEnabled;
+    setCarryForward(newValue);
   };
 
   return (
@@ -72,40 +101,107 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency }) => {
         </button>
       </div>
 
+      {/* Month Settings */}
+      <div className="bg-white p-6 rounded-[40px] shadow-sm border border-gray-50">
+        <button
+          onClick={() => setIsMonthSettingsModalOpen(true)}
+          className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-3xl hover:bg-gray-100 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="text-2xl">📅</div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-gray-800">Month Settings</p>
+              <p className="text-xs text-gray-500">
+                {carryForwardEnabled ? 'Carry-forward enabled' : 'Each month separate'}
+              </p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+      </div>
+
       {/* Currency Modal */}
       {isCurrencyModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 safe-top safe-bottom">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Select Currency</h3>
-            <div className="space-y-2">
+          <div className="bg-white rounded-3xl p-4 w-full max-w-sm max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-gray-800 mb-3">Select Currency</h3>
+            <div className="space-y-1.5">
               {CURRENCIES.map((currencyOption) => (
                 <button
                   key={currencyOption.code}
                   onClick={() => handleCurrencyChange(currencyOption.code)}
-                  className={`w-full flex items-center justify-between p-3 rounded-2xl transition-colors ${
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-colors ${
                     currency === currencyOption.code
                       ? 'bg-emerald-50 border border-emerald-200'
                       : 'bg-gray-50 hover:bg-gray-100'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">{currencyOption.flag}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{currencyOption.flag}</span>
                     <div className="text-left">
-                      <p className="font-semibold text-gray-800">{currencyOption.name}</p>
-                      <p className="text-xs text-gray-500">{currencyOption.code} • {currencyOption.symbol}</p>
+                      <p className="text-sm font-semibold text-gray-800">{currencyOption.name}</p>
+                      <p className="text-[11px] text-gray-500">{currencyOption.code} • {currencyOption.symbol}</p>
                     </div>
                   </div>
                   {currency === currencyOption.code && (
-                    <span className="text-emerald-600 text-xl">✓</span>
+                    <span className="text-emerald-600 text-lg">✓</span>
                   )}
                 </button>
               ))}
             </div>
             <button
               onClick={() => setIsCurrencyModalOpen(false)}
-              className="w-full mt-6 p-4 bg-gray-100 text-gray-700 font-semibold rounded-2xl hover:bg-gray-200 transition-colors"
+              className="w-full mt-4 p-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors text-sm"
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Month Settings Modal */}
+      {isMonthSettingsModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 safe-top safe-bottom">
+          <div className="bg-white rounded-3xl p-4 w-full max-w-sm">
+            <h3 className="text-lg font-bold text-gray-800 mb-3">Month Settings</h3>
+
+            <div className="bg-gray-50 rounded-xl p-3 mb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Carry-forward Balance</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Previous month's remaining balance carries forward
+                  </p>
+                </div>
+                <button
+                  onClick={handleToggleCarryForward}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                    carryForwardEnabled ? 'bg-emerald-500' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                      carryForwardEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 rounded-xl p-3 mb-4">
+              <p className="text-[11px] text-blue-800 font-medium leading-tight">
+                {carryForwardEnabled
+                  ? "Each month starts with previous month's remaining balance (income - expenses)"
+                  : "Each month starts fresh from zero. Only current month transactions are counted."
+                }
+              </p>
+            </div>
+
+            <button
+              onClick={() => setIsMonthSettingsModalOpen(false)}
+              className="w-full p-3 bg-emerald-500 text-white font-semibold rounded-xl hover:bg-emerald-600 transition-colors text-sm"
+            >
+              Done
             </button>
           </div>
         </div>
@@ -126,6 +222,19 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency }) => {
           </div>
           <span className="text-gray-300 group-hover:translate-x-1 transition-transform">→</span>
         </button> */}
+        <button
+          onClick={handleResetData}
+          disabled={isResetting}
+          className="w-full bg-orange-50 p-5 rounded-3xl border border-orange-100 flex items-center justify-between group"
+        >
+          <div className={`flex items-center gap-4 ${isResetting ? 'text-orange-400' : 'text-orange-600'}`}>
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-lg">
+              {isResetting ? '⏳' : '🗑️'}
+            </div>
+            <span className="font-bold">{isResetting ? 'Deleting...' : 'Reset All Data'}</span>
+          </div>
+          <span className="text-orange-200">→</span>
+        </button>
         <button 
           onClick={handleLogout}
           className="w-full bg-red-50 p-5 rounded-3xl border border-red-100 flex items-center justify-between group mt-10"

@@ -26,16 +26,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
 
   const filteredCategories = categories.filter(c => c.type === type);
 
-  console.log('TransactionForm state:', {
-    amount,
-    categoryId,
-    date,
-    note,
-    type,
-    errors,
-    filteredCategoriesCount: filteredCategories.length
-  });
-
   const applyParsingResult = (result: any) => {
     if (result) {
       if (result.type) setType(result.type);
@@ -109,20 +99,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
       newErrors.category = 'Please select a category';
     }
     setErrors(newErrors);
-    console.log('Validation errors found:', newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Form submitted with data:', { amount, categoryId, date, note, type });
 
     if (!validate()) {
-      console.log('Form validation failed, returning early');
       return;
     }
 
-    console.log('Form validation passed, calling onSubmit');
     onSubmit({
       amount: parseFloat(amount),
       categoryId,
@@ -219,7 +205,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
                 key={cat.id}
                 type="button"
                 onClick={() => {
-                  console.log('Category selected:', cat.name, 'with ID:', cat.id);
                   setCategoryId(cat.id);
                   if (errors.category) setErrors({...errors, category: ''});
                 }}
