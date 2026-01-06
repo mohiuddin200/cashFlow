@@ -250,13 +250,103 @@ export const saveCategory = async (userId: string, category: Omit<Category, 'id'
   }
 };
 
-export const updateCategory = async (userId: string, categoryId: string, category: Partial<Category>) => {
+export const updateCategory = async (userId: string, categoryId: string, category: Partial<Category>, isOffline = false) => {
+  const isOnline = navigator.onLine;
+  const finalCategory = { id: categoryId, ...category, userId };
+
   try {
-    const categoryDoc = doc(db, "users", userId, "categories", categoryId);
-    await updateDoc(categoryDoc, category);
-    return { id: categoryId, ...category };
+    // Always update offline storage first
+    await offlineSyncService.init();
+    await offlineSyncService.saveCategory(
+      finalCategory as Category,
+      !isOnline || isOffline
+    );
+
+    // If online and not explicitly offline, sync with Firebase
+    if (isOnline && !isOffline) {
+      const categoryDoc = doc(db, "users", userId, "categories", categoryId);
+      await updateDoc(categoryDoc, category);
+    }
+
+    return finalCategory;
   } catch (error) {
     console.error("Error updating category:", error);
+
+    // If Firebase fails but we're online, save to offline storage
+    if (isOnline && !isOffline) {
+      await offlineSyncService.init();
+      await offlineSyncService.saveCategory(finalCategory as Category, true);
+    }
+
+    throw error;
+  }
+};
+
+export const deleteCategory = async (userId: string, categoryId: string, isOffline = false) => {
+  const isOnline = navigator.onLine;
+
+  try {
+    // Always update offline storage first
+    await offlineSyncService.init();
+    await offlineSyncService.deleteCategory(categoryId, !isOnline || isOffline);
+
+    // If online and not explicitly offline, sync with Firebase
+    if (isOnline && !isOffline) {
+      const categoryDoc = doc(db, "users", userId, "categories", categoryId);
+      await deleteDoc(categoryDoc);
+    }
+  } catch (error) {
+    console.error("Error deleting category:", error);
+
+    // If Firebase fails but we're online, save to offline storage
+    if (isOnline && !isOffline) {
+      await offlineSyncService.init();
+      await offlineSyncService.deleteCategory(categoryId, true);
+    }
+
+    throw error;
+  }
+};
+
+export const reassignCategoryForTransactions = async (
+  userId: string,
+  oldCategoryId: string,
+  newCategoryId: string
+) => {
+  try {
+    // Get all transactions with the old category
+    const transactionsCollection = collection(db, "users", userId, "transactions");
+    const q = query(transactionsCollection, orderBy("date", "desc"));
+    const querySnapshot = await getDocs(q);
+
+    // Batch update all transactions with the old category
+    const batch = [];
+    for (const doc of querySnapshot.docs) {
+      const transaction = doc.data();
+      if (transaction.categoryId === oldCategoryId) {
+        batch.push(updateDoc(doc.ref, { categoryId: newCategoryId }));
+      }
+    }
+
+    // Execute all updates
+    await Promise.all(batch);
+
+    // Also update offline storage
+    await offlineSyncService.init();
+    const offlineTransactions = await offlineSyncService.getTransactions();
+
+    for (const tx of offlineTransactions) {
+      if (tx.data.categoryId === oldCategoryId) {
+        await offlineSyncService.saveTransaction(
+          { ...tx.data, categoryId: newCategoryId },
+          false
+        );
+      }
+    }
+
+    return { success: true, count: batch.length };
+  } catch (error) {
+    console.error("Error reassigning category for transactions:", error);
     throw error;
   }
 };

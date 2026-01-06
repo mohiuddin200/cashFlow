@@ -9,9 +9,11 @@ interface TransactionFormProps {
   onCancel: () => void;
   onDelete?: () => void;
   initialData?: Transaction;
+  onCreateCategory?: (c: Omit<Category, 'id'>) => void;
+  onNavigateToCategories?: () => void;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit, onCancel, onDelete, initialData }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit, onCancel, onDelete, initialData, onCreateCategory, onNavigateToCategories }) => {
   const [type, setType] = useState<TransactionType>(initialData?.type || 'expense');
   const [amount, setAmount] = useState(initialData?.amount.toString() || '');
   const [categoryId, setCategoryId] = useState(initialData?.categoryId || '');
@@ -21,8 +23,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
   const [isParsing, setIsParsing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  
-    const recognitionRef = useRef<any>(null);
+
+  // Category creation modal state
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [catName, setCatName] = useState('');
+  const [catIcon, setCatIcon] = useState('🔖');
+  const [catColor, setCatColor] = useState('bg-emerald-500');
+
+  const catColors = [
+    'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500',
+    'bg-emerald-500', 'bg-teal-500', 'bg-blue-500', 'bg-indigo-500',
+    'bg-purple-500', 'bg-pink-500', 'bg-cyan-500'
+  ];
+
+  const recognitionRef = useRef<any>(null);
 
   const filteredCategories = categories.filter(c => c.type === type);
 
@@ -100,6 +114,33 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleCreateCategory = () => {
+    if (!catName.trim()) {
+      alert('Please enter a category name');
+      return;
+    }
+
+    onCreateCategory?.({
+      name: catName.trim(),
+      icon: catIcon,
+      type,
+      color: catColor
+    });
+
+    // Reset modal state
+    setCatName('');
+    setCatIcon('🔖');
+    setCatColor('bg-emerald-500');
+    setShowCategoryModal(false);
+  };
+
+  const openCategoryModal = () => {
+    setCatName('');
+    setCatIcon('🔖');
+    setCatColor('bg-emerald-500');
+    setShowCategoryModal(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -215,6 +256,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
               </button>
             ))}
           </div>
+
+          {/* Create Category Button */}
+          {onCreateCategory && (
+            <button
+              type="button"
+              onClick={openCategoryModal}
+              className="w-full py-3 border-2 mt-4 border-dashed border-emerald-300 rounded-2xl text-emerald-600 font-bold text-sm hover:bg-emerald-50 transition-all flex items-center justify-center gap-2"
+            >
+              <span>+ Create New Category</span>
+            </button>
+          )}
+
+          {/* View All Categories Button */}
+          {onNavigateToCategories && (
+            <button
+              type="button"
+              onClick={onNavigateToCategories}
+              className="w-full py-2 mt-4 text-gray-400 font-bold text-xs hover:text-gray-600 transition-all"
+            >
+              View All Categories →
+            </button>
+          )}
+
           {errors.category && <p className="text-red-500 text-[10px] mt-2 ml-1 font-bold uppercase">{errors.category}</p>}
         </div>
 
@@ -259,6 +323,72 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
           </button>
         </div>
       </form>
+
+      {/* Category Creation Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 safe-top safe-bottom">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">Create Category</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5 ml-1">Name</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-gray-200 focus:border-emerald-500 focus:outline-none font-medium"
+                  value={catName}
+                  onChange={e => setCatName(e.target.value)}
+                  placeholder="e.g. Groceries"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5 ml-1">Icon</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-gray-200 focus:border-emerald-500 focus:outline-none text-center text-2xl"
+                  value={catIcon}
+                  onChange={e => setCatIcon(e.target.value)}
+                  maxLength={2}
+                  placeholder="e.g. 🛒"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block mb-2.5 ml-1">Color</label>
+                <div className="flex flex-wrap gap-2 justify-between bg-gray-50/50 p-3 rounded-2xl border border-gray-100">
+                  {catColors.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCatColor(c)}
+                      className={`w-8 h-8 rounded-full ${c} transition-all ${catColor === c ? 'ring-4 ring-offset-2 ring-emerald-500 scale-110' : 'opacity-80 hover:opacity-100 hover:scale-110'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryModal(false)}
+                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateCategory}
+                  className="flex-1 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-colors"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

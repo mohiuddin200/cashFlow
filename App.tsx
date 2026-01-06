@@ -23,6 +23,9 @@ import {
   updateUserSettings,
   initializeUserDocument,
   saveCategory,
+  updateCategory,
+  deleteCategory,
+  reassignCategoryForTransactions,
   subscribeToUserSettings,
   initializeOfflineSync,
   saveLoan,
@@ -175,12 +178,18 @@ const App: React.FC = () => {
     const unsubscribeCategories = subscribeToCategories(
       user.uid,
       (fetchedCategories) => {
-        // If user has no custom categories, use defaults
-        if (fetchedCategories.length === 0) {
-          setCategories(DEFAULT_CATEGORIES);
-        } else {
-          setCategories(fetchedCategories);
-        }
+        // Always include default categories, and add custom categories on top
+        // Custom categories override defaults if they have the same ID
+        const defaultCategoriesMap = new Map(DEFAULT_CATEGORIES.map(c => [c.id, c]));
+        const customCategoriesMap = new Map(fetchedCategories.map(c => [c.id, c]));
+
+        // Merge: start with defaults, then add/override with custom categories
+        const mergedCategories = [
+          ...DEFAULT_CATEGORIES.filter(c => !customCategoriesMap.has(c.id)),
+          ...fetchedCategories
+        ];
+
+        setCategories(mergedCategories);
         hasLoadedCategories = true;
         checkIfAllLoaded();
       }
@@ -278,6 +287,64 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Error adding category:", error);
       alert("Failed to add category. Please try again.");
+    }
+  };
+
+  const handleUpdateCategory = async (id: string, category: Partial<Category>) => {
+    if (!user) return;
+
+    try {
+      await updateCategory(user.uid, id, category);
+    } catch (error) {
+      console.error("Error updating category:", error);
+      alert("Failed to update category. Please try again.");
+    }
+  };
+
+  const handleDeleteCategory = async (id: string, replacementCategoryId?: string) => {
+    if (!user) return;
+
+    try {
+      // Check if transactions exist with this category
+      const transactionsWithCategory = transactions.filter(t => t.categoryId === id);
+
+      if (transactionsWithCategory.length > 0 && !replacementCategoryId) {
+        // Show a simple prompt to select a replacement category
+        const category = categories.find(c => c.id === id);
+        const otherCategories = categories.filter(c => c.id !== id && c.type === category?.type);
+
+        if (otherCategories.length === 0) {
+          alert('Cannot delete this category. No other categories available to reassign transactions.');
+          return;
+        }
+
+        // Create a simple prompt message
+        const message = `This category has ${transactionsWithCategory.length} transaction(s).\n\n` +
+          `Available replacement categories:\n` +
+          otherCategories.map((c, i) => `${i + 1}. ${c.icon} ${c.name}`).join('\n') +
+          `\n\nEnter the number of the category to reassign transactions to:`;
+
+        const selection = prompt(message);
+
+        if (selection === null) return; // User cancelled
+
+        const index = parseInt(selection) - 1;
+        if (isNaN(index) || index < 0 || index >= otherCategories.length) {
+          alert('Invalid selection');
+          return;
+        }
+
+        replacementCategoryId = otherCategories[index].id;
+      }
+
+      if (replacementCategoryId) {
+        await reassignCategoryForTransactions(user.uid, id, replacementCategoryId);
+      }
+
+      await deleteCategory(user.uid, id);
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      alert("Failed to delete category. Please try again.");
     }
   };
 
@@ -507,12 +574,16 @@ const App: React.FC = () => {
                 setActiveTab("home");
               }}
               initialData={editingTransaction || undefined}
+              onCreateCategory={handleAddCategory}
+              onNavigateToCategories={() => setActiveTab("categories")}
             />
           )}
           {activeTab === "categories" && (
             <CategoryManager
               categories={categories}
               onAdd={handleAddCategory}
+              onUpdate={handleUpdateCategory}
+              onDelete={handleDeleteCategory}
             />
           )}
           {activeTab === "loans" && (
