@@ -7,6 +7,7 @@ import { saveFinancialAdvice, getLatestAdvice } from '../services/firebase';
 import { User } from 'firebase/auth';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useConsent } from '../services/consentContext';
 
 interface AIInsightsProps {
   transactions: Transaction[];
@@ -22,6 +23,8 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
   const [loading, setLoading] = useState(false);
   const [adviceSaved, setAdviceSaved] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const { hasConsented } = useConsent();
+  const aiConsentGranted = hasConsented('aiProcessing');
 
   const formatCurrency = (val: number) => {
     const localeMap: { [key: string]: string } = {
@@ -77,7 +80,8 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
       style: 'currency',
       currency: currency,
       currencyDisplay: 'symbol',
-      minimumFractionDigits: 0
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(val).replace(/[A-Z]{3}/, symbol);
   };
 
@@ -212,23 +216,31 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
         </div>
 
         <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-[11px] font-bold rounded-full hover:from-emerald-600 hover:to-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <svg
-              className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {aiConsentGranted ? (
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-[11px] font-bold rounded-full hover:from-emerald-600 hover:to-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {loading ? 'Generating...' : 'Generate New Advice'}
-          </button>
+              <svg
+                className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {loading ? 'Generating...' : 'Generate New Advice'}
+            </button>
+          ) : (
+            <div className="bg-amber-50 rounded-xl p-3 border border-amber-100 w-full">
+              <p className="text-xs text-amber-700 font-medium">
+                AI insights require consent to process your financial data. Enable "AI Financial Analysis" in Account Settings &gt; Privacy & Data.
+              </p>
+            </div>
+          )}
 
-          {!user && (
+          {!user && aiConsentGranted && (
             <span className="text-xs text-amber-600 font-medium">
               Sign in to save advice
             </span>

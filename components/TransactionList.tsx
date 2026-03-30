@@ -66,7 +66,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
       style: 'currency',
       currency: currency,
       currencyDisplay: 'symbol',
-      minimumFractionDigits: 0
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(val).replace(/[A-Z]{3}/, symbol);
   };
 

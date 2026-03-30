@@ -3,6 +3,11 @@ import React, { useState } from 'react';
 import { auth, signOut, User, deleteAllUserData } from '../services/firebase';
 import { CURRENCIES } from '../constants';
 import { Currency } from '../types';
+import { getAvatarUrl } from '../utils/avatar';
+import { useConsent } from '../services/consentContext';
+import { exportAllUserData, downloadAsJson, downloadAsCsv } from '../services/dataExport';
+import { offlineSyncService } from '../services/offlineSync';
+import PrivacyPolicy from './PrivacyPolicy';
 
 interface AccountProps {
   user: User;
@@ -16,23 +21,47 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
   const [isMonthSettingsModalOpen, setIsMonthSettingsModalOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
+
+  const { consent, updateConsent } = useConsent();
 
   const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to sign out?')) {
+    if (window.confirm('Are you sure you want to sign out? Local data will be cleared for your privacy.')) {
+      try {
+        await offlineSyncService.clearOfflineData();
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+        localStorage.clear();
+      } catch (error) {
+        console.error('Error clearing local data:', error);
+      }
       await signOut(auth);
     }
   };
 
   const handleResetData = async () => {
     const confirmation = window.prompt(
-      'Type "DELETE" to confirm you want to permanently delete ALL your data including transactions, loans, and categories. This action cannot be undone!'
+      'This will permanently delete ALL your data including transactions, loans, categories, and your account. Type "DELETE" to confirm. This action cannot be undone!'
     );
 
     if (confirmation === 'DELETE') {
       setIsResetting(true);
       try {
         await deleteAllUserData(user.uid);
-        window.location.reload(); // Reload to refresh the app with cleared data
+        // Clear all local data
+        await offlineSyncService.clearOfflineData();
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+        localStorage.clear();
+        // Optionally delete the Firebase Auth account
+        try {
+          await user.delete();
+        } catch {
+          // If re-auth is required, just sign out
+          await signOut(auth);
+        }
+        window.location.reload();
       } catch (error) {
         console.error('Error resetting data:', error);
         alert('Failed to reset data. Please try again.');
@@ -40,6 +69,48 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
       }
     } else if (confirmation !== null) {
       alert('Please type "DELETE" exactly to confirm.');
+    }
+  };
+
+  const handleExportJson = async () => {
+    setIsExporting(true);
+    try {
+      const data = await exportAllUserData(user.uid);
+      downloadAsJson(data);
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Failed to export data. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    setIsExporting(true);
+    try {
+      const data = await exportAllUserData(user.uid);
+      downloadAsCsv(data);
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Failed to export data. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleToggleAiConsent = async () => {
+    try {
+      await updateConsent({ aiProcessing: !consent?.aiProcessing });
+    } catch (error) {
+      console.error('Error updating consent:', error);
+    }
+  };
+
+  const handleToggleNotificationConsent = async () => {
+    try {
+      await updateConsent({ pushNotifications: !consent?.pushNotifications });
+    } catch (error) {
+      console.error('Error updating consent:', error);
     }
   };
 
@@ -61,20 +132,16 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
     <div className="space-y-8 pb-20">
       <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col items-center">
         <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-emerald-50 shadow-lg mb-6">
-          <img 
-            src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=10b981&color=fff`} 
-            alt="Profile" 
+          <img
+            src={getAvatarUrl(user)}
+            alt="Profile"
             className="w-full h-full object-cover"
           />
         </div>
         <h3 className="text-xl font-bold text-gray-800">{user.displayName || 'Finance User'}</h3>
         <p className="text-gray-400 text-sm font-medium">{user.email}</p>
-        
+
         <div className="mt-8 w-full flex gap-3">
-          {/* <div className="flex-1 bg-emerald-50 p-4 rounded-3xl text-center">
-            <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Status</p>
-            <p className="text-sm font-bold text-emerald-700">Premium</p>
-          </div> */}
           <div className="flex-1 bg-blue-50 p-4 rounded-3xl text-center">
             <p className="text-[10px] font-bold text-blue-600 uppercase mb-1">Joined</p>
             <p className="text-sm font-bold text-blue-700">
@@ -97,7 +164,7 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
               <p className="text-xs text-gray-500">{getCurrentCurrency().name} ({getCurrentCurrency().symbol})</p>
             </div>
           </div>
-          <span className="text-gray-400">→</span>
+          <span className="text-gray-400">&rarr;</span>
         </button>
       </div>
 
@@ -116,8 +183,97 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
               </p>
             </div>
           </div>
-          <span className="text-gray-400">→</span>
+          <span className="text-gray-400">&rarr;</span>
         </button>
+      </div>
+
+      {/* Privacy & Data Settings */}
+      <div className="bg-white p-6 rounded-[40px] shadow-sm border border-gray-50">
+        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Privacy & Data</h3>
+
+        {/* AI Processing Toggle */}
+        <div className="bg-gray-50 rounded-2xl p-4 mb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">AI Financial Analysis</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Send aggregated data for AI insights
+              </p>
+            </div>
+            <button
+              onClick={handleToggleAiConsent}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                consent?.aiProcessing ? 'bg-emerald-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                  consent?.aiProcessing ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Push Notifications Toggle */}
+        <div className="bg-gray-50 rounded-2xl p-4 mb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Push Notifications</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Receive reminders and alerts
+              </p>
+            </div>
+            <button
+              onClick={handleToggleNotificationConsent}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                consent?.pushNotifications ? 'bg-emerald-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                  consent?.pushNotifications ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Privacy Policy Link */}
+        <button
+          onClick={() => setIsPrivacyPolicyOpen(true)}
+          className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="text-lg">📜</div>
+            <p className="text-sm font-semibold text-gray-800">Privacy Policy</p>
+          </div>
+          <span className="text-gray-400">&rarr;</span>
+        </button>
+      </div>
+
+      {/* Data Export */}
+      <div className="bg-white p-6 rounded-[40px] shadow-sm border border-gray-50">
+        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Your Data</h3>
+        <p className="text-xs text-gray-500 mb-3 px-1">
+          Download all your financial data. This includes transactions, categories, loans, and AI advice.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExportJson}
+            disabled={isExporting}
+            className="flex-1 py-3 bg-blue-50 text-blue-700 font-semibold rounded-2xl hover:bg-blue-100 transition-colors text-sm border border-blue-100 disabled:opacity-50"
+          >
+            {isExporting ? 'Exporting...' : 'Export JSON'}
+          </button>
+          <button
+            onClick={handleExportCsv}
+            disabled={isExporting}
+            className="flex-1 py-3 bg-blue-50 text-blue-700 font-semibold rounded-2xl hover:bg-blue-100 transition-colors text-sm border border-blue-100 disabled:opacity-50"
+          >
+            {isExporting ? 'Exporting...' : 'Export CSV'}
+          </button>
+        </div>
       </div>
 
       {/* Currency Modal */}
@@ -207,21 +363,12 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
         </div>
       )}
 
+      {/* Privacy Policy Modal */}
+      {isPrivacyPolicyOpen && (
+        <PrivacyPolicy onClose={() => setIsPrivacyPolicyOpen(false)} />
+      )}
+
       <div className="space-y-3">
-        {/* <button className="w-full bg-white p-5 rounded-3xl shadow-sm border border-gray-50 flex items-center justify-between group">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-lg">⚙️</div>
-            <span className="font-bold text-gray-700">Settings</span>
-          </div>
-          <span className="text-gray-300 group-hover:translate-x-1 transition-transform">→</span>
-        </button>
-        <button className="w-full bg-white p-5 rounded-3xl shadow-sm border border-gray-50 flex items-center justify-between group">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-lg">📄</div>
-            <span className="font-bold text-gray-700">Export Data</span>
-          </div>
-          <span className="text-gray-300 group-hover:translate-x-1 transition-transform">→</span>
-        </button> */}
         <button
           onClick={handleResetData}
           disabled={isResetting}
@@ -231,19 +378,25 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-lg">
               {isResetting ? '⏳' : '🗑️'}
             </div>
-            <span className="font-bold">{isResetting ? 'Deleting...' : 'Reset All Data'}</span>
+            <div className="text-left">
+              <span className="font-bold block">{isResetting ? 'Deleting...' : 'Delete Account & Data'}</span>
+              <span className="text-[11px] text-orange-400 font-medium">Permanently removes all your data</span>
+            </div>
           </div>
-          <span className="text-orange-200">→</span>
+          <span className="text-orange-200">&rarr;</span>
         </button>
-        <button 
+        <button
           onClick={handleLogout}
           className="w-full bg-red-50 p-5 rounded-3xl border border-red-100 flex items-center justify-between group mt-10"
         >
           <div className="flex items-center gap-4 text-red-600">
             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-lg">🚪</div>
-            <span className="font-bold">Sign Out</span>
+            <div className="text-left">
+              <span className="font-bold block">Sign Out</span>
+              <span className="text-[11px] text-red-400 font-medium">Local data will be cleared</span>
+            </div>
           </div>
-          <span className="text-red-200">→</span>
+          <span className="text-red-200">&rarr;</span>
         </button>
       </div>
 

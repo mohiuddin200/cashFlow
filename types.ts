@@ -85,6 +85,15 @@ export interface LoanSettings {
   notificationsEnabled: boolean;
 }
 
+export interface PrivacyConsent {
+  essential: boolean;
+  aiProcessing: boolean;
+  pushNotifications: boolean;
+  consentVersion: string;
+  consentedAt: string;
+  updatedAt: string;
+}
+
 // Extended interfaces
 export interface UserSettings {
   spendingGoal: number;

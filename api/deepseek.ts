@@ -1,9 +1,19 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Enable CORS
+  // Enable CORS with restricted origins
+  const allowedOrigins = [
+    'https://cashflow-d07b5.web.app',
+    'https://cashflow-d07b5.firebaseapp.com',
+  ];
+  if (process.env.NODE_ENV === 'development') {
+    allowedOrigins.push('http://localhost:3000');
+  }
+  const origin = req.headers.origin || '';
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 

@@ -99,7 +99,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       style: 'currency',
       currency: currency,
       currencyDisplay: 'symbol',
-      minimumFractionDigits
+      minimumFractionDigits,
+      maximumFractionDigits: 0
     }).format(val).replace(/[A-Z]{3}/, symbol);
   };
 

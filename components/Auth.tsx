@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '../services/firebase';
+import PrivacyPolicy from './PrivacyPolicy';
 
 const Auth: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -8,6 +9,7 @@ const Auth: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
 
   const getErrorMessage = (err: any) => {
     const code = err.code || '';
@@ -112,12 +114,27 @@ const Auth: React.FC = () => {
         Google
       </button>
 
-      <button 
+      <p className="mt-6 text-[11px] text-gray-400 leading-relaxed px-4">
+        By {isLogin ? 'signing in' : 'creating an account'}, you agree to our{' '}
+        <button
+          type="button"
+          onClick={() => setShowPrivacyPolicy(true)}
+          className="text-emerald-600 font-semibold underline underline-offset-2"
+        >
+          Privacy Policy
+        </button>
+      </p>
+
+      <button
         onClick={() => setIsLogin(!isLogin)}
-        className="mt-8 text-xs font-bold text-emerald-600 uppercase tracking-widest"
+        className="mt-4 text-xs font-bold text-emerald-600 uppercase tracking-widest"
       >
         {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
       </button>
+
+      {showPrivacyPolicy && (
+        <PrivacyPolicy onClose={() => setShowPrivacyPolicy(false)} />
+      )}
     </div>
   );
 };

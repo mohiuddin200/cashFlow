@@ -41,6 +41,9 @@ import {
   getAvailableMonths,
   getRecentTransactionsForMonth,
 } from "./utils/monthCalculations";
+import { getAvatarUrl } from "./utils/avatar";
+import { ConsentProvider, useConsent } from "./services/consentContext";
+import ConsentBanner from "./components/ConsentBanner";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -96,7 +99,8 @@ const App: React.FC = () => {
         // Initialize offline sync service
         await initializeOfflineSync();
 
-        // Initialize push notifications (only if user is logged in and not localhost)
+        // Initialize push notifications (only if user is logged in, not localhost, and consented)
+        // Note: consent is checked at the component level via ConsentProvider
         if (user && window.location.hostname !== "localhost") {
           try {
             await initializeNotifications();
@@ -502,6 +506,113 @@ const App: React.FC = () => {
   if (!user) return <Auth />;
 
   return (
+    <ConsentProvider userId={user.uid}>
+      <AppContent
+        user={user}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        showSettings={showSettings}
+        setShowSettings={setShowSettings}
+        isDataLoading={isDataLoading}
+        transactions={transactions}
+        categories={categories}
+        loans={loans}
+        loanPayments={loanPayments}
+        spendingGoal={spendingGoal}
+        currency={currency}
+        carryForwardEnabled={carryForwardEnabled}
+        selectedMonth={selectedMonth}
+        setSelectedMonth={setSelectedMonth}
+        balance={balance}
+        currentMonthStats={currentMonthStats}
+        availableMonths={availableMonths}
+        recentTransactionsForMonth={recentTransactionsForMonth}
+        editingTransaction={editingTransaction}
+        setEditingTransaction={setEditingTransaction}
+        addTransaction={addTransaction}
+        updateTransaction={updateTransaction}
+        deleteTransaction={deleteTransaction}
+        handleSetSpendingGoal={handleSetSpendingGoal}
+        handleAddCategory={handleAddCategory}
+        handleUpdateCategory={handleUpdateCategory}
+        handleDeleteCategory={handleDeleteCategory}
+        handleSetCurrency={handleSetCurrency}
+        handleSetCarryForward={handleSetCarryForward}
+        startEditing={startEditing}
+        addLoan={addLoan}
+        handleUpdateLoan={handleUpdateLoan}
+        handleDeleteLoan={handleDeleteLoan}
+        addLoanPayment={addLoanPayment}
+      />
+    </ConsentProvider>
+  );
+};
+
+interface AppContentProps {
+  user: User;
+  activeTab: "home" | "history" | "add" | "categories" | "loans" | "insights";
+  setActiveTab: (tab: "home" | "history" | "add" | "categories" | "loans" | "insights") => void;
+  showSettings: boolean;
+  setShowSettings: (show: boolean) => void;
+  isDataLoading: boolean;
+  transactions: Transaction[];
+  categories: Category[];
+  loans: Loan[];
+  loanPayments: LoanPayment[];
+  spendingGoal: number;
+  currency: string;
+  carryForwardEnabled: boolean;
+  selectedMonth: Date;
+  setSelectedMonth: (month: Date) => void;
+  balance: number;
+  currentMonthStats: { income: number; expenses: number; net: number };
+  availableMonths: Date[];
+  recentTransactionsForMonth: Transaction[];
+  editingTransaction: Transaction | null;
+  setEditingTransaction: (t: Transaction | null) => void;
+  addTransaction: (t: Omit<Transaction, "id">) => Promise<void>;
+  updateTransaction: (t: Transaction) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
+  handleSetSpendingGoal: (goal: number) => Promise<void>;
+  handleAddCategory: (c: Omit<Category, "id">) => Promise<void>;
+  handleUpdateCategory: (id: string, category: Partial<Category>) => Promise<void>;
+  handleDeleteCategory: (id: string, replacementCategoryId?: string) => Promise<void>;
+  handleSetCurrency: (currency: string) => Promise<void>;
+  handleSetCarryForward: (enabled: boolean) => Promise<void>;
+  startEditing: (t: Transaction) => void;
+  addLoan: (l: Omit<Loan, "id">) => Promise<void>;
+  handleUpdateLoan: (l: Loan) => Promise<void>;
+  handleDeleteLoan: (id: string) => Promise<void>;
+  addLoanPayment: (p: Omit<LoanPayment, "id">) => Promise<void>;
+}
+
+const AppContent: React.FC<AppContentProps> = (props) => {
+  const {
+    user, activeTab, setActiveTab, showSettings, setShowSettings,
+    isDataLoading, transactions, categories, loans,
+    spendingGoal, currency, carryForwardEnabled,
+    selectedMonth, setSelectedMonth, balance, currentMonthStats,
+    availableMonths, recentTransactionsForMonth,
+    editingTransaction, setEditingTransaction,
+    addTransaction, updateTransaction, deleteTransaction,
+    handleSetSpendingGoal, handleAddCategory, handleUpdateCategory,
+    handleDeleteCategory, handleSetCurrency, handleSetCarryForward,
+    startEditing, addLoan, handleUpdateLoan, handleDeleteLoan, addLoanPayment,
+  } = props;
+
+  const { consent, isLoaded } = useConsent();
+
+  // Show consent banner if consent hasn't been given yet
+  if (isLoaded && !consent) {
+    return (
+      <>
+        <InstallPrompt />
+        <ConsentBanner />
+      </>
+    );
+  }
+
+  return (
     <>
       {/* PWA Components */}
       <InstallPrompt />
@@ -517,10 +628,7 @@ const App: React.FC = () => {
             className="w-8 h-8 rounded-xl overflow-hidden border border-emerald-100 shadow-sm"
           >
             <img
-              src={
-                user.photoURL ||
-                `https://ui-avatars.com/api/?name=${user.email}&background=10b981&color=fff`
-              }
+              src={getAvatarUrl(user)}
               alt="Profile"
               className="w-full h-full object-cover"
             />
