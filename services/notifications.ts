@@ -1,31 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAuth } from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
+import { messaging } from './firebase';
 
 class NotificationService {
-  private vapidKey = import.meta.env.VITE_VAPID_KEY || null; // This needs to be generated from Firebase Console
-  private messaging: any = null;
+  private vapidKey = import.meta.env.VITE_VAPID_KEY || null;
 
-  private async getMessaging() {
-    if (!this.messaging) {
-      try {
-        const { getMessaging } = await import('firebase/messaging');
-        // Your Firebase credentials - you should move this to a shared config
-        const firebaseConfig = {
-          apiKey: "AIzaSyBpmartgW9gogPjz60wIVdTRlFNEec0QJo",
-          authDomain: "cashflow-d07b5.firebaseapp.com",
-          projectId: "cashflow-d07b5",
-          storageBucket: "cashflow-d07b5.firebasestorage.app",
-          messagingSenderId: "491355699088",
-          appId: "1:491355699088:web:bcc04ef2120fa5b2186515"
-        };
-        const app = initializeApp(firebaseConfig);
-        this.messaging = getMessaging(app);
-      } catch (error) {
-        console.error('Error initializing Firebase Messaging:', error);
-      }
-    }
-    return this.messaging;
+  private getMessaging() {
+    return messaging;
   }
 
   async requestPermission() {
@@ -48,18 +29,16 @@ class NotificationService {
 
   async initializePushNotifications() {
     try {
-      // Request permission first
       const hasPermission = await this.requestPermission();
       if (!hasPermission) {
         console.log('Notification permission denied');
         return null;
       }
 
-      // Get FCM token
       const { getToken } = await import('firebase/messaging');
-      const messaging = await this.getMessaging();
+      const msg = this.getMessaging();
 
-      if (!messaging) {
+      if (!msg) {
         console.log('Firebase Messaging not available');
         return null;
       }
@@ -69,7 +48,7 @@ class NotificationService {
         return null;
       }
 
-      const token = await getToken(messaging, { vapidKey: this.vapidKey });
+      const token = await getToken(msg, { vapidKey: this.vapidKey });
 
       if (token) {
         console.log('FCM token:', token);
@@ -110,10 +89,10 @@ class NotificationService {
   async removeToken() {
     try {
       const { deleteToken } = await import('firebase/messaging');
-      const messaging = await this.getMessaging();
+      const msg = this.getMessaging();
 
-      if (messaging) {
-        await deleteToken(messaging);
+      if (msg) {
+        await deleteToken(msg);
       }
 
       // Remove token from user document
@@ -135,17 +114,16 @@ class NotificationService {
     }
   }
 
-  // Listen for foreground messages
   async onForegroundMessage(callback: (payload: any) => void) {
     try {
       const { onMessage } = await import('firebase/messaging');
-      const messaging = await this.getMessaging();
+      const msg = this.getMessaging();
 
-      if (!messaging) {
-        return () => {}; // Return empty unsubscribe function
+      if (!msg) {
+        return () => {};
       }
 
-      return onMessage(messaging, (payload) => {
+      return onMessage(msg, (payload) => {
         console.log('Received foreground message:', payload);
 
         // Show notification in foreground
@@ -255,24 +233,24 @@ export const notificationService = new NotificationService();
 export const useNotifications = () => {
   const [unsubscribe, setUnsubscribe] = useState<(() => void) | null>(null);
 
-  const requestNotificationPermission = async () => {
-    return await notificationService.requestPermission();
-  };
-
-  const initializeNotifications = async () => {
+  const initializeNotifications = useCallback(async () => {
     const token = await notificationService.initializePushNotifications();
 
-    // Set up foreground message listener
     if (token) {
       const unsub = await notificationService.onForegroundMessage((payload) => {
-        // Handle foreground messages here
         console.log('Notification received in foreground:', payload);
       });
       setUnsubscribe(() => unsub);
     }
 
     return token;
-  };
+  }, []);
+
+  const cleanup = useCallback(() => {
+    if (unsubscribe) {
+      unsubscribe();
+    }
+  }, [unsubscribe]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -283,12 +261,12 @@ export const useNotifications = () => {
     };
   }, [unsubscribe]);
 
-  return {
-    requestPermission: requestNotificationPermission,
+  return useMemo(() => ({
+    requestPermission: notificationService.requestPermission.bind(notificationService),
     initializeNotifications,
     sendBudgetWarning: notificationService.sendBudgetWarning.bind(notificationService),
     sendTransactionReminder: notificationService.sendTransactionReminder.bind(notificationService),
     sendMonthlySummary: notificationService.sendMonthlySummary.bind(notificationService),
-    cleanup: unsubscribe
-  };
+    cleanup
+  }), [initializeNotifications, cleanup]);
 };

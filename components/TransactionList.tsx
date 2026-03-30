@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Transaction, Category } from '../types';
+import { formatCurrency } from '../utils/currency';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -12,64 +13,7 @@ interface TransactionListProps {
 }
 
 const TransactionList: React.FC<TransactionListProps> = ({ transactions, categories, onDelete, onEdit, currency = 'BDT', selectedMonth }) => {
-  const formatCurrency = (val: number) => {
-    const localeMap: { [key: string]: string } = {
-      'USD': 'en-US',
-      'EUR': 'de-DE',
-      'GBP': 'en-GB',
-      'JPY': 'ja-JP',
-      'BDT': 'en-BD',
-      'INR': 'en-IN',
-      'TRY': 'tr-TR',
-      'CAD': 'en-CA',
-      'AUD': 'en-AU',
-      'CHF': 'de-CH',
-      'CNY': 'zh-CN',
-      'PKR': 'en-PK',
-      'SAR': 'ar-SA',
-      'AED': 'ar-AE',
-      'BRL': 'pt-BR',
-      'RUB': 'ru-RU',
-      'KRW': 'ko-KR',
-      'SGD': 'en-SG',
-      'MYR': 'en-MY',
-      'THB': 'th-TH'
-    };
-
-    const symbolMap: { [key: string]: string } = {
-      'USD': '$',
-      'EUR': '€',
-      'GBP': '£',
-      'JPY': '¥',
-      'BDT': '৳',
-      'INR': '₹',
-      'TRY': '₺',
-      'CAD': 'C$',
-      'AUD': 'A$',
-      'CHF': 'Fr',
-      'CNY': '¥',
-      'PKR': '₨',
-      'SAR': '﷼',
-      'AED': 'د.إ',
-      'BRL': 'R$',
-      'RUB': '₽',
-      'KRW': '₩',
-      'SGD': 'S$',
-      'MYR': 'RM',
-      'THB': '฿'
-    };
-
-    const locale = localeMap[currency] || 'en-US';
-    const symbol = symbolMap[currency] || '$';
-
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      currencyDisplay: 'symbol',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(val).replace(/[A-Z]{3}/, symbol);
-  };
+  const fmt = (val: number) => formatCurrency(val, currency);
 
   // Filter transactions by selected month
   const filteredTransactions = selectedMonth
@@ -119,7 +63,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
                     </div>
                     <div className="text-right ml-2 mr-4">
                       <p className={`font-bold ${t.type === 'income' ? 'text-emerald-500' : 'text-gray-800'}`}>
-                        {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                        {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
                       </p>
                     </div>
                     
@@ -150,4 +94,4 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
   );
 };
 
-export default TransactionList;
+export default React.memo(TransactionList);

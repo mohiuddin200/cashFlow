@@ -393,4 +393,4 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
   );
 };
 
-export default TransactionForm;
+export default React.memo(TransactionForm);

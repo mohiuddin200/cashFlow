@@ -8,6 +8,8 @@ import { useConsent } from '../services/consentContext';
 import { exportAllUserData, downloadAsJson, downloadAsCsv } from '../services/dataExport';
 import { offlineSyncService } from '../services/offlineSync';
 import PrivacyPolicy from './PrivacyPolicy';
+import ConfirmDialog from './ConfirmDialog';
+import InputDialog from './InputDialog';
 
 interface AccountProps {
   user: User;
@@ -23,52 +25,52 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
   const [isResetting, setIsResetting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { consent, updateConsent } = useConsent();
 
   const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to sign out? Local data will be cleared for your privacy.')) {
-      try {
-        await offlineSyncService.clearOfflineData();
-        const cacheNames = await caches.keys();
-        await Promise.all(cacheNames.map(name => caches.delete(name)));
-        localStorage.clear();
-      } catch (error) {
-        console.error('Error clearing local data:', error);
-      }
-      await signOut(auth);
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = async () => {
+    setShowLogoutConfirm(false);
+    try {
+      await offlineSyncService.clearOfflineData();
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+      localStorage.clear();
+    } catch (error) {
+      console.error('Error clearing local data:', error);
     }
+    await signOut(auth);
   };
 
   const handleResetData = async () => {
-    const confirmation = window.prompt(
-      'This will permanently delete ALL your data including transactions, loans, categories, and your account. Type "DELETE" to confirm. This action cannot be undone!'
-    );
+    setShowDeleteConfirm(true);
+  };
 
-    if (confirmation === 'DELETE') {
-      setIsResetting(true);
+  const confirmResetData = async (value: string) => {
+    setShowDeleteConfirm(false);
+    if (value !== 'DELETE') return;
+
+    setIsResetting(true);
+    try {
+      await deleteAllUserData(user.uid);
+      await offlineSyncService.clearOfflineData();
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+      localStorage.clear();
       try {
-        await deleteAllUserData(user.uid);
-        // Clear all local data
-        await offlineSyncService.clearOfflineData();
-        const cacheNames = await caches.keys();
-        await Promise.all(cacheNames.map(name => caches.delete(name)));
-        localStorage.clear();
-        // Optionally delete the Firebase Auth account
-        try {
-          await user.delete();
-        } catch {
-          // If re-auth is required, just sign out
-          await signOut(auth);
-        }
-        window.location.reload();
-      } catch (error) {
-        console.error('Error resetting data:', error);
-        alert('Failed to reset data. Please try again.');
-        setIsResetting(false);
+        await user.delete();
+      } catch {
+        await signOut(auth);
       }
-    } else if (confirmation !== null) {
-      alert('Please type "DELETE" exactly to confirm.');
+      window.location.reload();
+    } catch (error) {
+      console.error('Error resetting data:', error);
+      setIsResetting(false);
     }
   };
 
@@ -280,7 +282,16 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
       {isCurrencyModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 safe-top safe-bottom">
           <div className="bg-white rounded-3xl p-4 w-full max-w-sm max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-gray-800 mb-3">Select Currency</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-gray-800">Select Currency</h3>
+              <button
+                onClick={() => setIsCurrencyModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors text-lg"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
             <div className="space-y-1.5">
               {CURRENCIES.map((currencyOption) => (
                 <button
@@ -305,12 +316,6 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => setIsCurrencyModalOpen(false)}
-              className="w-full mt-4 p-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors text-sm"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}
@@ -353,12 +358,20 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
               </p>
             </div>
 
-            <button
-              onClick={() => setIsMonthSettingsModalOpen(false)}
-              className="w-full p-3 bg-emerald-500 text-white font-semibold rounded-xl hover:bg-emerald-600 transition-colors text-sm"
-            >
-              Done
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsMonthSettingsModalOpen(false)}
+                className="flex-1 p-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => setIsMonthSettingsModalOpen(false)}
+                className="flex-1 p-3 bg-emerald-500 text-white font-semibold rounded-xl hover:bg-emerald-600 transition-colors text-sm"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -401,6 +414,29 @@ const Account: React.FC<AccountProps> = ({ user, currency, setCurrency, carryFor
       </div>
 
       <p className="text-center text-[10px] text-gray-300 font-bold uppercase tracking-widest mt-10">CashFlow v2.0.1 • Personal Edition</p>
+
+      {/* Logout Confirmation */}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        title="Sign Out"
+        message="Are you sure you want to sign out? Local data will be cleared for your privacy."
+        confirmLabel="Sign Out"
+        confirmVariant="danger"
+        onConfirm={confirmLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
+
+      {/* Delete Account Confirmation */}
+      <InputDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Account & Data"
+        message={'This will permanently delete ALL your data including transactions, loans, categories, and your account. This action cannot be undone!'}
+        inputLabel='Type "DELETE" to confirm'
+        placeholder="DELETE"
+        submitLabel="Delete Everything"
+        onSubmit={confirmResetData}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 };

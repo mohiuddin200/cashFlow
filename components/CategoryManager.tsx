@@ -205,4 +205,4 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onAdd, on
   );
 };
 
-export default CategoryManager;
+export default React.memo(CategoryManager);

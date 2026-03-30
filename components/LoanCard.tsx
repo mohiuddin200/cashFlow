@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Loan, LoanStatus } from '../types';
 import { formatCurrency, formatDate } from '../utils/currency';
 import LoanDetails from './LoanDetails';
+import InputDialog from './InputDialog';
 
 interface LoanCardProps {
   loan: Loan;
@@ -19,6 +20,7 @@ const LoanCard: React.FC<LoanCardProps> = ({
   currency
 }) => {
   const [showDetails, setShowDetails] = useState(false);
+  const [showPaymentInput, setShowPaymentInput] = useState(false);
 
   const getStatusColor = (status: LoanStatus) => {
     switch (status) {
@@ -135,18 +137,7 @@ const LoanCard: React.FC<LoanCardProps> = ({
           </button>
           {loan.status === 'active' && (
             <button
-              onClick={() => {
-                // This would open a payment form
-                const amount = prompt('Enter payment amount:');
-                if (amount && parseFloat(amount) > 0) {
-                  onAddPayment({
-                    loanId: loan.id,
-                    amount: parseFloat(amount),
-                    date: new Date().toISOString().split('T')[0],
-                    note: ''
-                  });
-                }
-              }}
+              onClick={() => setShowPaymentInput(true)}
               className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors text-sm"
             >
               Add Payment
@@ -166,6 +157,30 @@ const LoanCard: React.FC<LoanCardProps> = ({
           currency={currency}
         />
       )}
+
+      {/* Quick Payment Input */}
+      <InputDialog
+        isOpen={showPaymentInput}
+        title="Add Payment"
+        message={`Enter payment amount for loan to ${loan.personName}`}
+        inputLabel="Amount"
+        inputType="number"
+        placeholder="0.00"
+        submitLabel="Add Payment"
+        onSubmit={(value) => {
+          const amount = parseFloat(value);
+          if (amount > 0) {
+            onAddPayment({
+              loanId: loan.id,
+              amount,
+              date: new Date().toISOString().split('T')[0],
+              note: ''
+            });
+          }
+          setShowPaymentInput(false);
+        }}
+        onCancel={() => setShowPaymentInput(false)}
+      />
     </>
   );
 };

@@ -1,26 +1,64 @@
-export const formatCurrency = (amount: number, currency: string = 'INR'): string => {
-  const locale = 'en-IN';
-  const formatter = new Intl.NumberFormat(locale, {
+const LOCALE_MAP: { [key: string]: string } = {
+  'USD': 'en-US',
+  'EUR': 'de-DE',
+  'GBP': 'en-GB',
+  'JPY': 'ja-JP',
+  'BDT': 'en-BD',
+  'INR': 'en-IN',
+  'TRY': 'tr-TR',
+  'CAD': 'en-CA',
+  'AUD': 'en-AU',
+  'CHF': 'de-CH',
+  'CNY': 'zh-CN',
+  'PKR': 'en-PK',
+  'SAR': 'ar-SA',
+  'AED': 'ar-AE',
+  'BRL': 'pt-BR',
+  'RUB': 'ru-RU',
+  'KRW': 'ko-KR',
+  'SGD': 'en-SG',
+  'MYR': 'en-MY',
+  'THB': 'th-TH'
+};
+
+const SYMBOL_MAP: { [key: string]: string } = {
+  'USD': '$',
+  'EUR': '€',
+  'GBP': '£',
+  'JPY': '¥',
+  'BDT': '৳',
+  'INR': '₹',
+  'TRY': '₺',
+  'CAD': 'C$',
+  'AUD': 'A$',
+  'CHF': 'Fr',
+  'CNY': '¥',
+  'PKR': '₨',
+  'SAR': '﷼',
+  'AED': 'د.إ',
+  'BRL': 'R$',
+  'RUB': '₽',
+  'KRW': '₩',
+  'SGD': 'S$',
+  'MYR': 'RM',
+  'THB': '฿'
+};
+
+export const formatCurrency = (amount: number, currency: string = 'BDT'): string => {
+  const locale = LOCALE_MAP[currency] || 'en-US';
+  const symbol = SYMBOL_MAP[currency] || '$';
+
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currency,
+    currencyDisplay: 'symbol',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  });
-
-  return formatter.format(amount);
+  }).format(amount).replace(/[A-Z]{3}/, symbol);
 };
 
 export const getCurrencySymbol = (currencyCode: string): string => {
-  const formatter = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currencyCode,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-
-  const formatted = formatter.format(1);
-  const symbol = formatted.replace(/[0-9.,\s]/g, '');
-  return symbol || currencyCode;
+  return SYMBOL_MAP[currencyCode] || currencyCode;
 };
 
 export const formatDate = (dateString: string): string => {

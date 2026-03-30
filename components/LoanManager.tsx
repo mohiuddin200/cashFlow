@@ -164,4 +164,4 @@ const LoanManager: React.FC<LoanManagerProps> = ({
   );
 };
 
-export default LoanManager;
+export default React.memo(LoanManager);

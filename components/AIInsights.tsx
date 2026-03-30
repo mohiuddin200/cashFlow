@@ -8,6 +8,7 @@ import { User } from 'firebase/auth';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useConsent } from '../services/consentContext';
+import { formatCurrency } from '../utils/currency';
 
 interface AIInsightsProps {
   transactions: Transaction[];
@@ -26,64 +27,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
   const { hasConsented } = useConsent();
   const aiConsentGranted = hasConsented('aiProcessing');
 
-  const formatCurrency = (val: number) => {
-    const localeMap: { [key: string]: string } = {
-      'USD': 'en-US',
-      'EUR': 'de-DE',
-      'GBP': 'en-GB',
-      'JPY': 'ja-JP',
-      'BDT': 'en-BD',
-      'INR': 'en-IN',
-      'TRY': 'tr-TR',
-      'CAD': 'en-CA',
-      'AUD': 'en-AU',
-      'CHF': 'de-CH',
-      'CNY': 'zh-CN',
-      'PKR': 'en-PK',
-      'SAR': 'ar-SA',
-      'AED': 'ar-AE',
-      'BRL': 'pt-BR',
-      'RUB': 'ru-RU',
-      'KRW': 'ko-KR',
-      'SGD': 'en-SG',
-      'MYR': 'en-MY',
-      'THB': 'th-TH'
-    };
-
-    const symbolMap: { [key: string]: string } = {
-      'USD': '$',
-      'EUR': '€',
-      'GBP': '£',
-      'JPY': '¥',
-      'BDT': '৳',
-      'INR': '₹',
-      'TRY': '₺',
-      'CAD': 'C$',
-      'AUD': 'A$',
-      'CHF': 'Fr',
-      'CNY': '¥',
-      'PKR': '₨',
-      'SAR': '﷼',
-      'AED': 'د.إ',
-      'BRL': 'R$',
-      'RUB': '₽',
-      'KRW': '₩',
-      'SGD': 'S$',
-      'MYR': 'RM',
-      'THB': '฿'
-    };
-
-    const locale = localeMap[currency] || 'en-US';
-    const symbol = symbolMap[currency] || '$';
-
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      currencyDisplay: 'symbol',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(val).replace(/[A-Z]{3}/, symbol);
-  };
+  const fmt = (val: number) => formatCurrency(val, currency);
 
   const loadExistingAdvice = async () => {
     if (!user) return;
@@ -113,8 +57,8 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
 
     try {
       const summary = `
-        Current Status: Monthly Goal is ${formatCurrency(spendingGoal)}.
-        Income: ${formatCurrency(stats.income)}, Expenses: ${formatCurrency(stats.expenses)}, Net: ${formatCurrency(stats.net)}.
+        Current Status: Monthly Goal is ${fmt(spendingGoal)}.
+        Income: ${fmt(stats.income)}, Expenses: ${fmt(stats.expenses)}, Net: ${fmt(stats.net)}.
         Budget Status: ${stats.expenses > spendingGoal ? 'OVER BUDGET' : 'WITHIN BUDGET'}.
         Total Transactions: ${transactions.length}.
       `;
@@ -314,7 +258,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
                   iconType="circle"
                   formatter={(value, entry: any) => (
                     <span className="text-xs text-gray-600">
-                      {value} ({formatCurrency(entry.payload.value)})
+                      {value} ({fmt(entry.payload.value)})
                     </span>
                   )}
                 />
@@ -338,7 +282,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
           </div>
           <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-2">Avg. Daily Spend</p>
           <p className="text-xl font-bold mt-1 bg-gradient-to-r from-blue-800 to-indigo-800 bg-clip-text text-transparent">
-            {formatCurrency(stats.expenses / 30)}
+            {fmt(stats.expenses / 30)}
           </p>
         </div>
         <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-5 rounded-3xl border border-purple-100 shadow-md relative overflow-hidden group hover:shadow-lg transition-shadow">
@@ -355,4 +299,4 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
   );
 };
 
-export default AIInsights;
+export default React.memo(AIInsights);

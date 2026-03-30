@@ -20,6 +20,8 @@ import {
   query,
   orderBy,
   limit,
+  where,
+  startAfter,
   addDoc,
   deleteDoc,
   Timestamp,
@@ -27,6 +29,7 @@ import {
   enableNetwork,
   disableNetwork
 } from "firebase/firestore";
+import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import { getMessaging } from "firebase/messaging";
 import type { User } from "firebase/auth";
 import type { Transaction, Category, FinancialAdvice, Loan, LoanPayment } from "../types";
@@ -194,9 +197,10 @@ export const deleteTransaction = async (userId: string, transactionId: string, i
   }
 };
 
-export const subscribeToTransactions = (userId: string, callback: (transactions: Transaction[]) => void) => {
+// Subscribe to transactions with a default limit for safety
+export const subscribeToTransactions = (userId: string, callback: (transactions: Transaction[]) => void, maxResults = 200) => {
   const transactionsCollection = collection(db, "users", userId, "transactions");
-  const q = query(transactionsCollection, orderBy("date", "desc"));
+  const q = query(transactionsCollection, orderBy("date", "desc"), limit(maxResults));
 
   return onSnapshot(q, (snapshot) => {
     const transactions: Transaction[] = snapshot.docs.map(doc => ({
@@ -206,6 +210,57 @@ export const subscribeToTransactions = (userId: string, callback: (transactions:
     } as Transaction));
     callback(transactions);
   });
+};
+
+// Subscribe to transactions scoped to a specific month for efficiency
+export const subscribeToMonthTransactions = (
+  userId: string,
+  monthStart: string,
+  monthEnd: string,
+  callback: (transactions: Transaction[]) => void
+) => {
+  const transactionsCollection = collection(db, "users", userId, "transactions");
+  const q = query(
+    transactionsCollection,
+    where("date", ">=", monthStart),
+    where("date", "<=", monthEnd),
+    orderBy("date", "desc"),
+    limit(500)
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const transactions: Transaction[] = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      date: doc.data().date instanceof Timestamp ? doc.data().date.toDate().toISOString() : doc.data().date
+    } as Transaction));
+    callback(transactions);
+  });
+};
+
+// Paginated transaction fetching for history view
+export const fetchTransactionPage = async (
+  userId: string,
+  pageSize: number = 50,
+  lastDoc?: QueryDocumentSnapshot<DocumentData>
+): Promise<{ transactions: Transaction[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> => {
+  const transactionsCollection = collection(db, "users", userId, "transactions");
+  const constraints = [orderBy("date", "desc"), limit(pageSize)];
+  if (lastDoc) {
+    constraints.push(startAfter(lastDoc));
+  }
+  const q = query(transactionsCollection, ...constraints);
+  const snapshot = await getDocs(q);
+
+  const transactions: Transaction[] = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    date: doc.data().date instanceof Timestamp ? doc.data().date.toDate().toISOString() : doc.data().date
+  } as Transaction));
+
+  const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+
+  return { transactions, lastDoc: newLastDoc };
 };
 
 // Categories CRUD operations
@@ -634,7 +689,7 @@ export const deleteLoan = async (userId: string, loanId: string, isOffline = fal
 
 export const subscribeToLoans = (userId: string, callback: (loans: Loan[]) => void) => {
   const loansCollection = collection(db, "users", userId, "loans");
-  const q = query(loansCollection, orderBy("date", "desc"));
+  const q = query(loansCollection, orderBy("date", "desc"), limit(100));
 
   return onSnapshot(q, (snapshot) => {
     const loans: Loan[] = snapshot.docs.map(doc => {
@@ -703,20 +758,23 @@ export const saveLoanPayment = async (userId: string, payment: Omit<LoanPayment,
 
 export const subscribeToLoanPayments = (userId: string, loanId: string, callback: (payments: LoanPayment[]) => void) => {
   const paymentsCollection = collection(db, "users", userId, "loanPayments");
-  const q = query(paymentsCollection, orderBy("date", "desc"));
+  const q = query(
+    paymentsCollection,
+    where("loanId", "==", loanId),
+    orderBy("date", "desc"),
+    limit(100)
+  );
 
   return onSnapshot(q, (snapshot) => {
-    const payments: LoanPayment[] = snapshot.docs
-      .map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          date: data.date instanceof Timestamp ? data.date.toDate().toISOString() : data.date,
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt
-        } as LoanPayment;
-      })
-      .filter(payment => payment.loanId === loanId);
+    const payments: LoanPayment[] = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        date: data.date instanceof Timestamp ? data.date.toDate().toISOString() : data.date,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt
+      } as LoanPayment;
+    });
     callback(payments);
   });
 };
@@ -784,6 +842,8 @@ export {
   collection,
   query,
   orderBy,
-  limit
+  limit,
+  where,
+  startAfter
 };
 export type { User };

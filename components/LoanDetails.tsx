@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Loan } from '../types';
 import { formatCurrency, formatDate } from '../utils/currency';
 import LoanForm from './LoanForm';
+import ConfirmDialog from './ConfirmDialog';
+import { getCurrencySymbol } from '../utils/currency';
 
 interface LoanDetailsProps {
   loan: Loan;
@@ -22,6 +24,11 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({
 }) => {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Controlled payment form state (replaces getElementById)
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentNote, setPaymentNote] = useState('');
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -189,12 +196,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({
                 Edit Loan
               </button>
               <button
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to delete this loan?')) {
-                    onDelete(loan.id);
-                    onClose();
-                  }
-                }}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="py-2 px-4 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 transition-colors"
               >
                 Delete Loan
@@ -204,84 +206,105 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({
         </div>
       </div>
 
-      {/* Simple Payment Form */}
+      {/* Payment Form with controlled inputs */}
       {showPaymentForm && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
             <h3 className="text-lg font-semibold mb-4">Add Payment</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Payment Amount
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                    ₹
-                  </span>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const amount = parseFloat(paymentAmount);
+              if (amount && amount > 0) {
+                onAddPayment({
+                  loanId: loan.id,
+                  amount,
+                  date: paymentDate,
+                  note: paymentNote
+                });
+                setPaymentAmount('');
+                setPaymentNote('');
+                setShowPaymentForm(false);
+              }
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Amount
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                      {getCurrencySymbol(currency)}
+                    </span>
+                    <input
+                      type="number"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      placeholder="0.00"
+                      step="0.01"
+                      min="0"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date
+                  </label>
                   <input
-                    type="number"
-                    id="paymentAmount"
-                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    placeholder="0.00"
-                    step="0.01"
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Note (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentNote}
+                    onChange={(e) => setPaymentNote(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="Payment note"
+                  />
+                </div>
+                <div className="flex space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentForm(false)}
+                    className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                    className="flex-1 py-2 px-4 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600 active:scale-95 transition-transform disabled:opacity-50"
+                  >
+                    Add Payment
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  id="paymentDate"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  defaultValue={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Note (Optional)
-                </label>
-                <input
-                  type="text"
-                  id="paymentNote"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  placeholder="Payment note"
-                />
-              </div>
-              <div className="flex space-x-3 pt-2">
-                <button
-                  onClick={() => setShowPaymentForm(false)}
-                  className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    const amountInput = document.getElementById('paymentAmount') as HTMLInputElement;
-                    const dateInput = document.getElementById('paymentDate') as HTMLInputElement;
-                    const noteInput = document.getElementById('paymentNote') as HTMLInputElement;
-
-                    const amount = parseFloat(amountInput.value);
-                    if (amount && amount > 0) {
-                      onAddPayment({
-                        loanId: loan.id,
-                        amount,
-                        date: dateInput.value,
-                        note: noteInput.value
-                      });
-                      setShowPaymentForm(false);
-                    }
-                  }}
-                  className="flex-1 py-2 px-4 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600 active:scale-95 transition-transform"
-                >
-                  Add Payment
-                </button>
-              </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Loan"
+        message="Are you sure you want to delete this loan? Any linked transactions will also be deleted."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+          onDelete(loan.id);
+          onClose();
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 };

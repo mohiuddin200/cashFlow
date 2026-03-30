@@ -1,5 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Transaction, Category, Loan, LoanPayment } from '../types';
+import type { User } from 'firebase/auth';
 
 interface OfflineDB extends DBSchema {
   transactions: {
@@ -57,7 +58,9 @@ interface OfflineDB extends DBSchema {
       operation: 'create' | 'update' | 'delete';
       type: 'transaction' | 'category' | 'loan' | 'loanPayment';
       data: any;
+      userId: string;
       timestamp: number;
+      retryCount?: number;
     };
   };
 }
@@ -65,6 +68,12 @@ interface OfflineDB extends DBSchema {
 class OfflineSyncService {
   private db: IDBPDatabase<OfflineDB> | null = null;
   private syncInProgress = false;
+  private currentUserId: string | null = null;
+  private maxRetries = 3;
+
+  setUserId(userId: string | null) {
+    this.currentUserId = userId;
+  }
 
   async init() {
     if (this.db) return;
@@ -307,12 +316,19 @@ class OfflineSyncService {
   }
 
   // Sync queue methods
-  private async addToSyncQueue(item: Omit<OfflineDB['syncQueue']['value'], 'timestamp'>) {
+  private async addToSyncQueue(item: Omit<OfflineDB['syncQueue']['value'], 'timestamp' | 'userId'>) {
     if (!this.db) await this.init();
+
+    if (!this.currentUserId) {
+      console.error('Cannot add to sync queue: no userId set');
+      return;
+    }
 
     await this.db!.add('syncQueue', {
       ...item,
+      userId: this.currentUserId,
       timestamp: Date.now(),
+      retryCount: 0,
     });
   }
 
@@ -331,13 +347,25 @@ class OfflineSyncService {
 
       for (const item of pendingItems) {
         try {
-          // Here you would sync with Firebase
-          // For now, we'll just mark as synced
           await this.processSyncItem(item);
-          await this.db!.delete('syncQueue', item.id);
+          // Successfully synced — remove from queue
+          if (item.id !== undefined) {
+            await this.db!.delete('syncQueue', item.id);
+          }
         } catch (error) {
           console.error('Failed to sync item:', error);
-          // Keep in queue for retry
+          const retryCount = (item.retryCount || 0) + 1;
+
+          if (retryCount >= this.maxRetries && item.id !== undefined) {
+            // Max retries exceeded — remove from queue to prevent infinite buildup
+            console.error('Max retries exceeded for sync item, removing:', item);
+            await this.db!.delete('syncQueue', item.id);
+          } else if (item.id !== undefined) {
+            // Update retry count with exponential backoff delay
+            await this.db!.put('syncQueue', { ...item, retryCount });
+          }
+          // Stop processing remaining items — will retry on next online event
+          break;
         }
       }
     } finally {
@@ -346,20 +374,64 @@ class OfflineSyncService {
   }
 
   private async processSyncItem(item: OfflineDB['syncQueue']['value']) {
-    // This would integrate with your Firebase service
-    // For now, it's a placeholder that would be replaced with actual Firebase calls
-    console.log('Processing sync item:', item);
+    // Lazy import to avoid circular dependency
+    const firebase = await import('./firebase');
+    const userId = item.userId;
 
-    // Example of how it would work:
-    // if (item.type === 'transaction') {
-    //   if (item.operation === 'create') {
-    //     await firebaseService.addTransaction(item.data);
-    //   } else if (item.operation === 'update') {
-    //     await firebaseService.updateTransaction(item.data.id, item.data);
-    //   } else if (item.operation === 'delete') {
-    //     await firebaseService.deleteTransaction(item.data.id);
-    //   }
-    // }
+    if (!userId) {
+      throw new Error('Sync item missing userId');
+    }
+
+    switch (item.type) {
+      case 'transaction':
+        if (item.operation === 'create') {
+          const { id: _id, userId: _uid, ...txData } = item.data;
+          await firebase.saveTransaction(userId, txData);
+        } else if (item.operation === 'update') {
+          const { id: txId, userId: _uid2, ...txUpdateData } = item.data;
+          if (txId) await firebase.updateTransaction(userId, txId, txUpdateData);
+        } else if (item.operation === 'delete') {
+          if (item.data.id) await firebase.deleteTransaction(userId, item.data.id);
+        }
+        break;
+
+      case 'category':
+        if (item.operation === 'create') {
+          const { id: _cid, userId: _cuid, ...catData } = item.data;
+          await firebase.saveCategory(userId, catData);
+        } else if (item.operation === 'update') {
+          const { id: catId, userId: _cuid2, ...catUpdateData } = item.data;
+          if (catId) await firebase.updateCategory(userId, catId, catUpdateData);
+        } else if (item.operation === 'delete') {
+          if (item.data.id) await firebase.deleteCategory(userId, item.data.id);
+        }
+        break;
+
+      case 'loan':
+        if (item.operation === 'create') {
+          const { id: _lid, userId: _luid, ...loanData } = item.data;
+          await firebase.saveLoan(userId, loanData);
+        } else if (item.operation === 'update') {
+          const { id: loanId, userId: _luid2, ...loanUpdateData } = item.data;
+          if (loanId) await firebase.updateLoan(userId, loanId, loanUpdateData);
+        } else if (item.operation === 'delete') {
+          if (item.data.id) await firebase.deleteLoan(userId, item.data.id);
+        }
+        break;
+
+      case 'loanPayment':
+        if (item.operation === 'create') {
+          const { id: _pid, userId: _puid, ...paymentData } = item.data;
+          await firebase.saveLoanPayment(userId, paymentData);
+        } else if (item.operation === 'delete') {
+          // Loan payment deletion is handled through loan updates
+          console.log('Loan payment delete sync not implemented');
+        }
+        break;
+
+      default:
+        console.warn('Unknown sync item type:', item.type);
+    }
   }
 
   // Status methods

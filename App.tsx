@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Transaction, Category, Loan, LoanPayment } from "./types";
 import { DEFAULT_CATEGORIES, DEFAULT_CURRENCY } from "./constants";
 import Dashboard from "./components/Dashboard";
@@ -11,6 +11,9 @@ import Account from "./components/Account";
 import Auth from "./components/Auth";
 import InstallPrompt from "./components/InstallPrompt";
 import OfflineIndicator from "./components/OfflineIndicator";
+import ErrorBoundary from "./components/ErrorBoundary";
+import ConfirmDialog from "./components/ConfirmDialog";
+import SelectDialog from "./components/SelectDialog";
 import {
   auth,
   onAuthStateChanged,
@@ -35,6 +38,7 @@ import {
   subscribeToLoanPayments,
   saveLoanPayment,
 } from "./services/firebase";
+import { offlineSyncService } from "./services/offlineSync";
 import { useNotifications } from "./services/notifications";
 import {
   calculateMonthBalanceWithCarryForward,
@@ -68,6 +72,21 @@ const App: React.FC = () => {
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
+
+  // Confirm dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+  // Category reassignment dialog state
+  const [categoryReassignDialog, setCategoryReassignDialog] = useState<{
+    isOpen: boolean;
+    categoryId: string;
+    options: { value: string; label: string; icon?: string }[];
+  }>({ isOpen: false, categoryId: '', options: [] });
 
   // Initialize PWA features and notifications
   const { initializeNotifications, cleanup } = useNotifications();
@@ -128,6 +147,8 @@ const App: React.FC = () => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthLoading(false);
+      // Set userId on offline sync service so sync queue items include it
+      offlineSyncService.setUserId(currentUser?.uid || null);
     });
     return () => unsubscribe();
   }, []);
@@ -262,14 +283,19 @@ const App: React.FC = () => {
   const deleteTransaction = async (id: string) => {
     if (!user) return;
 
-    if (window.confirm("Are you sure you want to delete this transaction?")) {
-      try {
-        await deleteTransactionInFirebase(user.uid, id);
-      } catch (error) {
-        console.error("Error deleting transaction:", error);
-        alert("Failed to delete transaction. Please try again.");
-      }
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Transaction',
+      message: 'Are you sure you want to delete this transaction?',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          await deleteTransactionInFirebase(user.uid, id);
+        } catch (error) {
+          console.error("Error deleting transaction:", error);
+        }
+      },
+    });
   };
 
   const handleSetSpendingGoal = async (goal: number) => {
@@ -309,36 +335,33 @@ const App: React.FC = () => {
     if (!user) return;
 
     try {
-      // Check if transactions exist with this category
       const transactionsWithCategory = transactions.filter(t => t.categoryId === id);
 
       if (transactionsWithCategory.length > 0 && !replacementCategoryId) {
-        // Show a simple prompt to select a replacement category
         const category = categories.find(c => c.id === id);
         const otherCategories = categories.filter(c => c.id !== id && c.type === category?.type);
 
         if (otherCategories.length === 0) {
-          alert('Cannot delete this category. No other categories available to reassign transactions.');
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Cannot Delete',
+            message: 'No other categories available to reassign transactions.',
+            onConfirm: () => setConfirmDialog(prev => ({ ...prev, isOpen: false })),
+          });
           return;
         }
 
-        // Create a simple prompt message
-        const message = `This category has ${transactionsWithCategory.length} transaction(s).\n\n` +
-          `Available replacement categories:\n` +
-          otherCategories.map((c, i) => `${i + 1}. ${c.icon} ${c.name}`).join('\n') +
-          `\n\nEnter the number of the category to reassign transactions to:`;
-
-        const selection = prompt(message);
-
-        if (selection === null) return; // User cancelled
-
-        const index = parseInt(selection) - 1;
-        if (isNaN(index) || index < 0 || index >= otherCategories.length) {
-          alert('Invalid selection');
-          return;
-        }
-
-        replacementCategoryId = otherCategories[index].id;
+        // Show select dialog for category reassignment
+        setCategoryReassignDialog({
+          isOpen: true,
+          categoryId: id,
+          options: otherCategories.map(c => ({
+            value: c.id,
+            label: c.name,
+            icon: c.icon,
+          })),
+        });
+        return;
       }
 
       if (replacementCategoryId) {
@@ -348,7 +371,18 @@ const App: React.FC = () => {
       await deleteCategory(user.uid, id);
     } catch (error) {
       console.error("Error deleting category:", error);
-      alert("Failed to delete category. Please try again.");
+    }
+  };
+
+  const handleCategoryReassign = async (replacementId: string) => {
+    if (!user) return;
+    const catId = categoryReassignDialog.categoryId;
+    setCategoryReassignDialog(prev => ({ ...prev, isOpen: false }));
+    try {
+      await reassignCategoryForTransactions(user.uid, catId, replacementId);
+      await deleteCategory(user.uid, catId);
+    } catch (error) {
+      console.error("Error reassigning category:", error);
     }
   };
 
@@ -417,14 +451,19 @@ const App: React.FC = () => {
   const handleDeleteLoan = async (id: string) => {
     if (!user) return;
 
-    if (window.confirm("Are you sure you want to delete this loan?")) {
-      try {
-        await deleteLoan(user.uid, id);
-      } catch (error) {
-        console.error("Error deleting loan:", error);
-        alert("Failed to delete loan. Please try again.");
-      }
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Loan',
+      message: 'Are you sure you want to delete this loan? Any linked transactions will also be deleted.',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          await deleteLoan(user.uid, id);
+        } catch (error) {
+          console.error("Error deleting loan:", error);
+        }
+      },
+    });
   };
 
   const addLoanPayment = async (payment: Omit<LoanPayment, "id">) => {
@@ -468,24 +507,14 @@ const App: React.FC = () => {
     setActiveTab("add"); // We'll use the same tab for now
   };
 
-  const balance = useMemo(() => {
+  const { balance, stats: currentMonthStats } = useMemo(() => {
     const balanceData = calculateMonthBalanceWithCarryForward(
       transactions,
       loans,
       selectedMonth,
       carryForwardEnabled
     );
-    return balanceData.balance;
-  }, [transactions, loans, selectedMonth, carryForwardEnabled]);
-
-  const currentMonthStats = useMemo(() => {
-    const balanceData = calculateMonthBalanceWithCarryForward(
-      transactions,
-      loans,
-      selectedMonth,
-      carryForwardEnabled
-    );
-    return balanceData.stats;
+    return { balance: balanceData.balance, stats: balanceData.stats };
   }, [transactions, loans, selectedMonth, carryForwardEnabled]);
 
   const availableMonths = useMemo(() => {
@@ -507,42 +536,65 @@ const App: React.FC = () => {
 
   return (
     <ConsentProvider userId={user.uid}>
-      <AppContent
-        user={user}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        showSettings={showSettings}
-        setShowSettings={setShowSettings}
-        isDataLoading={isDataLoading}
-        transactions={transactions}
-        categories={categories}
-        loans={loans}
-        loanPayments={loanPayments}
-        spendingGoal={spendingGoal}
-        currency={currency}
-        carryForwardEnabled={carryForwardEnabled}
-        selectedMonth={selectedMonth}
-        setSelectedMonth={setSelectedMonth}
-        balance={balance}
-        currentMonthStats={currentMonthStats}
-        availableMonths={availableMonths}
-        recentTransactionsForMonth={recentTransactionsForMonth}
-        editingTransaction={editingTransaction}
-        setEditingTransaction={setEditingTransaction}
-        addTransaction={addTransaction}
-        updateTransaction={updateTransaction}
-        deleteTransaction={deleteTransaction}
-        handleSetSpendingGoal={handleSetSpendingGoal}
-        handleAddCategory={handleAddCategory}
-        handleUpdateCategory={handleUpdateCategory}
-        handleDeleteCategory={handleDeleteCategory}
-        handleSetCurrency={handleSetCurrency}
-        handleSetCarryForward={handleSetCarryForward}
-        startEditing={startEditing}
-        addLoan={addLoan}
-        handleUpdateLoan={handleUpdateLoan}
-        handleDeleteLoan={handleDeleteLoan}
-        addLoanPayment={addLoanPayment}
+      <ErrorBoundary>
+        <AppContent
+          user={user}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          showSettings={showSettings}
+          setShowSettings={setShowSettings}
+          isDataLoading={isDataLoading}
+          transactions={transactions}
+          categories={categories}
+          loans={loans}
+          loanPayments={loanPayments}
+          spendingGoal={spendingGoal}
+          currency={currency}
+          carryForwardEnabled={carryForwardEnabled}
+          selectedMonth={selectedMonth}
+          setSelectedMonth={setSelectedMonth}
+          balance={balance}
+          currentMonthStats={currentMonthStats}
+          availableMonths={availableMonths}
+          recentTransactionsForMonth={recentTransactionsForMonth}
+          editingTransaction={editingTransaction}
+          setEditingTransaction={setEditingTransaction}
+          addTransaction={addTransaction}
+          updateTransaction={updateTransaction}
+          deleteTransaction={deleteTransaction}
+          handleSetSpendingGoal={handleSetSpendingGoal}
+          handleAddCategory={handleAddCategory}
+          handleUpdateCategory={handleUpdateCategory}
+          handleDeleteCategory={handleDeleteCategory}
+          handleSetCurrency={handleSetCurrency}
+          handleSetCarryForward={handleSetCarryForward}
+          startEditing={startEditing}
+          addLoan={addLoan}
+          handleUpdateLoan={handleUpdateLoan}
+          handleDeleteLoan={handleDeleteLoan}
+          addLoanPayment={addLoanPayment}
+        />
+      </ErrorBoundary>
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel="Delete"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Category Reassignment Dialog */}
+      <SelectDialog
+        isOpen={categoryReassignDialog.isOpen}
+        title="Reassign Transactions"
+        message="Choose a category to move existing transactions to before deletion:"
+        options={categoryReassignDialog.options}
+        submitLabel="Reassign & Delete"
+        onSubmit={handleCategoryReassign}
+        onCancel={() => setCategoryReassignDialog(prev => ({ ...prev, isOpen: false }))}
       />
     </ConsentProvider>
   );
@@ -637,82 +689,94 @@ const AppContent: React.FC<AppContentProps> = (props) => {
 
         <main className="flex-1 overflow-y-auto pb-24 px-4 pt-4">
           {activeTab === "home" && (
-            <Dashboard
-              balance={balance}
-              stats={currentMonthStats}
-              recentTransactions={recentTransactionsForMonth}
-              transactions={transactions}
-              categories={categories}
-              spendingGoal={spendingGoal}
-              setSpendingGoal={handleSetSpendingGoal}
-              onEdit={startEditing}
-              isLoading={isDataLoading}
-              currency={currency}
-              loans={loans}
-              selectedMonth={selectedMonth}
-              setSelectedMonth={setSelectedMonth}
-              availableMonths={availableMonths}
-              carryForwardEnabled={carryForwardEnabled}
-            />
+            <ErrorBoundary>
+              <Dashboard
+                balance={balance}
+                stats={currentMonthStats}
+                recentTransactions={recentTransactionsForMonth}
+                transactions={transactions}
+                categories={categories}
+                spendingGoal={spendingGoal}
+                setSpendingGoal={handleSetSpendingGoal}
+                onEdit={startEditing}
+                isLoading={isDataLoading}
+                currency={currency}
+                loans={loans}
+                selectedMonth={selectedMonth}
+                setSelectedMonth={setSelectedMonth}
+                availableMonths={availableMonths}
+                carryForwardEnabled={carryForwardEnabled}
+              />
+            </ErrorBoundary>
           )}
           {activeTab === "history" && (
-            <TransactionList
-              transactions={transactions}
-              categories={categories}
-              onDelete={deleteTransaction}
-              onEdit={startEditing}
-              currency={currency}
-              selectedMonth={selectedMonth}
-            />
+            <ErrorBoundary>
+              <TransactionList
+                transactions={transactions}
+                categories={categories}
+                onDelete={deleteTransaction}
+                onEdit={startEditing}
+                currency={currency}
+                selectedMonth={selectedMonth}
+              />
+            </ErrorBoundary>
           )}
           {activeTab === "add" && (
-            <TransactionForm
-              categories={categories}
-              onSubmit={
-                editingTransaction
-                  ? (t) =>
-                      updateTransaction({
-                        ...t,
-                        id: editingTransaction.id,
-                      } as Transaction)
-                  : addTransaction
-              }
-              onCancel={() => {
-                setEditingTransaction(null);
-                setActiveTab("home");
-              }}
-              initialData={editingTransaction || undefined}
-              onCreateCategory={handleAddCategory}
-              onNavigateToCategories={() => setActiveTab("categories")}
-            />
+            <ErrorBoundary>
+              <TransactionForm
+                categories={categories}
+                onSubmit={
+                  editingTransaction
+                    ? (t) =>
+                        updateTransaction({
+                          ...t,
+                          id: editingTransaction.id,
+                        } as Transaction)
+                    : addTransaction
+                }
+                onCancel={() => {
+                  setEditingTransaction(null);
+                  setActiveTab("home");
+                }}
+                initialData={editingTransaction || undefined}
+                onCreateCategory={handleAddCategory}
+                onNavigateToCategories={() => setActiveTab("categories")}
+              />
+            </ErrorBoundary>
           )}
           {activeTab === "categories" && (
-            <CategoryManager
-              categories={categories}
-              onAdd={handleAddCategory}
-              onUpdate={handleUpdateCategory}
-              onDelete={handleDeleteCategory}
-            />
+            <ErrorBoundary>
+              <CategoryManager
+                categories={categories}
+                onAdd={handleAddCategory}
+                onUpdate={handleUpdateCategory}
+                onDelete={handleDeleteCategory}
+              />
+            </ErrorBoundary>
           )}
           {activeTab === "loans" && (
-            <LoanManager
-              loans={loans}
-              onAddLoan={addLoan}
-              onUpdateLoan={handleUpdateLoan}
-              onDeleteLoan={handleDeleteLoan}
-              onAddPayment={addLoanPayment}
-              currency={currency}
-            />
+            <ErrorBoundary>
+              <LoanManager
+                loans={loans}
+                onAddLoan={addLoan}
+                onUpdateLoan={handleUpdateLoan}
+                onDeleteLoan={handleDeleteLoan}
+                onAddPayment={addLoanPayment}
+                currency={currency}
+              />
+            </ErrorBoundary>
           )}
           {activeTab === "insights" && (
-            <AIInsights
-              transactions={transactions}
-              stats={currentMonthStats}
-              categories={categories}
-              spendingGoal={spendingGoal}
-              currency={currency}
-              user={user}
-            />
+            <ErrorBoundary>
+              <AIInsights
+                transactions={transactions}
+                stats={currentMonthStats}
+                categories={categories}
+                spendingGoal={spendingGoal}
+                currency={currency}
+                user={user}
+              />
+            </ErrorBoundary>
           )}
         </main>
 

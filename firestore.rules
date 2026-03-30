@@ -3,30 +3,79 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Users can only access their own documents
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
 
-      // Users can access their own transactions and categories
+      // Transactions with data validation
       match /transactions/{transactionId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.type in ['income', 'expense']
+          && request.resource.data.date is string
+          && request.resource.data.date.size() > 0
+          && request.resource.data.categoryId is string
+          && request.resource.data.categoryId.size() > 0;
+        allow update: if request.auth != null && request.auth.uid == userId
+          && (!('amount' in request.resource.data) || (request.resource.data.amount is number && request.resource.data.amount > 0))
+          && (!('type' in request.resource.data) || request.resource.data.type in ['income', 'expense'])
+          && (!('date' in request.resource.data) || (request.resource.data.date is string && request.resource.data.date.size() > 0))
+          && (!('categoryId' in request.resource.data) || (request.resource.data.categoryId is string && request.resource.data.categoryId.size() > 0));
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
 
+      // Categories with data validation
       match /categories/{categoryId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.type in ['income', 'expense'];
+        allow update: if request.auth != null && request.auth.uid == userId
+          && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() > 0))
+          && (!('type' in request.resource.data) || request.resource.data.type in ['income', 'expense']);
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
 
-      // Users can access their own financial advice
+      // Financial advice
       match /advice/{adviceId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0;
+        allow update: if request.auth != null && request.auth.uid == userId;
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
 
-      // Users can access their own loans
+      // Loans with data validation
       match /loans/{loanId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.direction in ['given', 'taken']
+          && request.resource.data.status in ['active', 'completed', 'overdue']
+          && request.resource.data.personName is string
+          && request.resource.data.personName.size() > 0;
+        allow update: if request.auth != null && request.auth.uid == userId
+          && (!('amount' in request.resource.data) || (request.resource.data.amount is number && request.resource.data.amount > 0))
+          && (!('direction' in request.resource.data) || request.resource.data.direction in ['given', 'taken'])
+          && (!('status' in request.resource.data) || request.resource.data.status in ['active', 'completed', 'overdue']);
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
 
-      // Users can access their own loan payments
+      // Loan payments with data validation
       match /loanPayments/{paymentId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.loanId is string
+          && request.resource.data.loanId.size() > 0;
+        allow update: if request.auth != null && request.auth.uid == userId
+          && (!('amount' in request.resource.data) || (request.resource.data.amount is number && request.resource.data.amount > 0));
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
     }
   }

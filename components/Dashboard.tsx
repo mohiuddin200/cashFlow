@@ -41,68 +41,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState(spendingGoal.toString());
 
-  const formatCurrency = (val: number) => {
-    const localeMap: { [key: string]: string } = {
-      'USD': 'en-US',
-      'EUR': 'de-DE',
-      'GBP': 'en-GB',
-      'JPY': 'ja-JP',
-      'BDT': 'en-BD',
-      'INR': 'en-IN',
-      'TRY': 'tr-TR',
-      'CAD': 'en-CA',
-      'AUD': 'en-AU',
-      'CHF': 'de-CH',
-      'CNY': 'zh-CN',
-      'PKR': 'en-PK',
-      'SAR': 'ar-SA',
-      'AED': 'ar-AE',
-      'BRL': 'pt-BR',
-      'RUB': 'ru-RU',
-      'KRW': 'ko-KR',
-      'SGD': 'en-SG',
-      'MYR': 'en-MY',
-      'THB': 'th-TH'
-    };
-
-    const symbolMap: { [key: string]: string } = {
-      'USD': '$',
-      'EUR': '€',
-      'GBP': '£',
-      'JPY': '¥',
-      'BDT': '৳',
-      'INR': '₹',
-      'TRY': '₺',
-      'CAD': 'C$',
-      'AUD': 'A$',
-      'CHF': 'Fr',
-      'CNY': '¥',
-      'PKR': '₨',
-      'SAR': '﷼',
-      'AED': 'د.إ',
-      'BRL': 'R$',
-      'RUB': '₽',
-      'KRW': '₩',
-      'SGD': 'S$',
-      'MYR': 'RM',
-      'THB': '฿'
-    };
-
-    const locale = localeMap[currency] || 'en-US';
-    const symbol = symbolMap[currency] || '$';
-
-    // For currencies like JPY, KRW, etc. that don't use decimal places
-    const noDecimalCurrencies = ['JPY', 'KRW', 'CLP', 'ISK', 'VND'];
-    const minimumFractionDigits = noDecimalCurrencies.includes(currency) ? 0 : 0;
-
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      currencyDisplay: 'symbol',
-      minimumFractionDigits,
-      maximumFractionDigits: 0
-    }).format(val).replace(/[A-Z]{3}/, symbol);
-  };
+  const fmt = (val: number) => formatCurrency(val, currency);
 
   const handleGoalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,16 +126,16 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[32px] p-7 text-white shadow-2xl relative overflow-hidden">
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
         <p className="text-xs opacity-75 font-bold uppercase tracking-widest relative z-10">Total Cash Balance</p>
-        <h2 className="text-4xl font-black mt-1 tracking-tight relative z-10">{formatCurrency(balance)}</h2>
+        <h2 className="text-4xl font-black mt-1 tracking-tight relative z-10">{fmt(balance)}</h2>
         
         <div className="mt-8 grid grid-cols-2 gap-4 relative z-10">
           <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/10">
             <p className="text-[9px] uppercase opacity-70 tracking-widest font-black">Monthly Income</p>
-            <p className="text-xl font-bold">{formatCurrency(stats.income)}</p>
+            <p className="text-xl font-bold">{fmt(stats.income)}</p>
           </div>
           <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/10">
             <p className="text-[9px] uppercase opacity-70 tracking-widest font-black">Monthly Spent</p>
-            <p className="text-xl font-bold">{formatCurrency(stats.expenses)}</p>
+            <p className="text-xl font-bold">{fmt(stats.expenses)}</p>
           </div>
         </div>
       </div>
@@ -205,7 +144,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-blue-50 p-4 rounded-3xl border border-blue-100 flex flex-col justify-center">
           <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Daily Limit Left</p>
-          <p className="text-lg font-bold text-gray-800">{formatCurrency(dailyLimit)}</p>
+          <p className="text-lg font-bold text-gray-800">{fmt(dailyLimit)}</p>
         </div>
         <div className="bg-purple-50 p-4 rounded-3xl border border-purple-100 flex flex-col justify-center">
           <p className="text-[9px] font-black text-purple-600 uppercase tracking-widest mb-1">Days Remaining</p>
@@ -303,7 +242,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-bold text-gray-700">Monthly Usage</span>
-          <span className="text-xs text-gray-400 font-bold">{formatCurrency(stats.expenses)} / {formatCurrency(spendingGoal)}</span>
+          <span className="text-xs text-gray-400 font-bold">{fmt(stats.expenses)} / {fmt(spendingGoal)}</span>
         </div>
 
         <div className="w-full bg-gray-100 h-4 rounded-full overflow-hidden shadow-inner p-1">
@@ -319,8 +258,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           </p>
           <p className={`text-[10px] font-black uppercase ${stats.expenses > spendingGoal ? 'text-red-500' : 'text-emerald-600'}`}>
             {stats.expenses > spendingGoal 
-              ? `Exceeded by ${formatCurrency(stats.expenses - spendingGoal)}` 
-              : `Available: ${formatCurrency(spendingGoal - stats.expenses)}`}
+              ? `Exceeded by ${fmt(stats.expenses - spendingGoal)}` 
+              : `Available: ${fmt(spendingGoal - stats.expenses)}`}
           </p>
         </div>
       </div>
@@ -366,7 +305,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <p className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">{category?.name} • {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
                   </div>
                   <div className={`text-right font-black ml-2 ${t.type === 'income' ? 'text-emerald-500' : 'text-gray-800'}`}>
-                    {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                    {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
                   </div>
                 </div>
               );
@@ -378,4 +317,4 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
 };
 
-export default Dashboard;
+export default React.memo(Dashboard);

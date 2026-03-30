@@ -113,7 +113,18 @@ export default defineConfig(({ mode }) => {
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.DEEPSEEK_API_KEY': JSON.stringify(env.DEEPSEEK_API_KEY)
+        // DEEPSEEK_API_KEY intentionally excluded from client bundle — only used server-side in Vercel function
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/messaging'],
+              charts: ['recharts'],
+              markdown: ['react-markdown', 'rehype-highlight', 'remark-gfm'],
+            }
+          }
+        }
       },
       resolve: {
         alias: {
