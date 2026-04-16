@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Loan, LoanStatus } from '../types';
 import { formatCurrency, formatDate } from '../utils/currency';
+import { shareLoanCard } from '../utils/shareLoan';
 import LoanDetails from './LoanDetails';
 import InputDialog from './InputDialog';
+import ShareableLoanCard from './ShareableLoanCard';
 
 interface LoanCardProps {
   loan: Loan;
@@ -21,6 +23,24 @@ const LoanCard: React.FC<LoanCardProps> = ({
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [showPaymentInput, setShowPaymentInput] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const shareRef = useRef<HTMLDivElement>(null);
+
+  const handleShare = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      await shareLoanCard(
+        shareRef.current,
+        `loan-${loan.personName}-${loan.date}`,
+        `Loan with ${loan.personName}`
+      );
+    } catch (err) {
+      console.error('Failed to share loan', err);
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   const getStatusColor = (status: LoanStatus) => {
     switch (status) {
@@ -81,6 +101,15 @@ const LoanCard: React.FC<LoanCardProps> = ({
                 Connected
               </span>
             )}
+            <button
+              onClick={handleShare}
+              disabled={isSharing}
+              className="text-gray-500 hover:text-emerald-600 p-2 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              aria-label="Share this loan"
+              title="Share this loan"
+            >
+              {isSharing ? '…' : '📤'}
+            </button>
           </div>
         </div>
 
@@ -181,6 +210,19 @@ const LoanCard: React.FC<LoanCardProps> = ({
         }}
         onCancel={() => setShowPaymentInput(false)}
       />
+
+      {/* Off-screen render target for share PNG — privacy-scoped to this loan only */}
+      <div
+        aria-hidden="true"
+        style={{ position: 'absolute', left: '-9999px', top: 0, pointerEvents: 'none' }}
+      >
+        <ShareableLoanCard
+          ref={shareRef}
+          variant="single"
+          loan={loan}
+          currency={currency}
+        />
+      </div>
     </>
   );
 };

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Loan, LoanDirection } from '../types';
 import { getCurrencySymbol } from '../utils/currency';
+import { isContactPickerSupported, pickContact } from '../utils/contactPicker';
 
 interface LoanFormProps {
   onSubmit: (loan: Omit<Loan, 'id'>) => void;
@@ -22,6 +23,28 @@ const LoanForm: React.FC<LoanFormProps> = ({ onSubmit, onCancel, initialData, cu
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [pickingContact, setPickingContact] = useState(false);
+  const canPickContacts = useMemo(() => isContactPickerSupported(), []);
+
+  const handlePickContact = async () => {
+    if (pickingContact) return;
+    setPickingContact(true);
+    try {
+      const contact = await pickContact();
+      if (!contact) return;
+      setFormData(prev => ({
+        ...prev,
+        personName:
+          contact.name && contact.name.trim()
+            ? contact.name.trim()
+            : prev.personName,
+        personContact: contact.phone?.trim() ?? prev.personContact,
+      }));
+      setErrors(prev => ({ ...prev, personName: '', personContact: '' }));
+    } finally {
+      setPickingContact(false);
+    }
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -153,15 +176,29 @@ const LoanForm: React.FC<LoanFormProps> = ({ onSubmit, onCancel, initialData, cu
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Contact (Optional)
           </label>
-          <input
-            type="text"
-            value={formData.personContact}
-            onChange={(e) => handleInputChange('personContact', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${
-              errors.personContact ? 'border-red-500' : 'border-gray-300'
-            }`}
-            placeholder="Phone or email"
-          />
+          <div className="flex items-stretch space-x-2">
+            <input
+              type="text"
+              value={formData.personContact}
+              onChange={(e) => handleInputChange('personContact', e.target.value)}
+              className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${
+                errors.personContact ? 'border-red-500' : 'border-gray-300'
+              }`}
+              placeholder="Phone or email"
+            />
+            {canPickContacts && (
+              <button
+                type="button"
+                onClick={handlePickContact}
+                disabled={pickingContact}
+                className="px-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Pick from contacts"
+                title="Pick from contacts"
+              >
+                {pickingContact ? '…' : '📇'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Amount */}

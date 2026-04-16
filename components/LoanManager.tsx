@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loan, LoanDirection } from '../types';
 import { formatCurrency } from '../utils/currency';
+import { shareLoanCard } from '../utils/shareLoan';
 import LoanCard from './LoanCard';
 import LoanForm from './LoanForm';
+import PersonSelectorDialog from './PersonSelectorDialog';
+import ShareableLoanCard from './ShareableLoanCard';
 
 interface LoanManagerProps {
   loans: Loan[];
@@ -23,6 +26,43 @@ const LoanManager: React.FC<LoanManagerProps> = ({
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [filter, setFilter] = useState<'all' | 'given' | 'taken'>('all');
+  const [showPersonShare, setShowPersonShare] = useState(false);
+  const [sharePersonName, setSharePersonName] = useState<string | null>(null);
+  const [isSharingPerson, setIsSharingPerson] = useState(false);
+  const personShareRef = useRef<HTMLDivElement>(null);
+
+  const personLoans = useMemo(
+    () => (sharePersonName ? loans.filter(l => l.personName === sharePersonName) : []),
+    [loans, sharePersonName]
+  );
+
+  useEffect(() => {
+    if (!sharePersonName || personLoans.length === 0 || isSharingPerson) return;
+    let cancelled = false;
+    setIsSharingPerson(true);
+    // Wait a frame so the off-screen render commits before capture.
+    const raf = requestAnimationFrame(async () => {
+      try {
+        await shareLoanCard(
+          personShareRef.current,
+          `loans-${sharePersonName}`,
+          `Loans with ${sharePersonName}`
+        );
+      } catch (err) {
+        console.error('Failed to share person loans', err);
+      } finally {
+        if (!cancelled) {
+          setSharePersonName(null);
+          setIsSharingPerson(false);
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharePersonName]);
 
   // Calculate statistics
   const totalGiven = loans.filter(l => l.direction === 'given').reduce((sum, l) => sum + l.remainingAmount, 0);
@@ -41,12 +81,24 @@ const LoanManager: React.FC<LoanManagerProps> = ({
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Loans</h1>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="bg-emerald-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-emerald-600 active:scale-95 transition-transform"
-        >
-          Add Loan
-        </button>
+        <div className="flex items-center space-x-2">
+          {loans.length > 0 && (
+            <button
+              onClick={() => setShowPersonShare(true)}
+              disabled={isSharingPerson}
+              className="px-3 py-2 border border-emerald-500 text-emerald-600 rounded-lg font-medium hover:bg-emerald-50 active:scale-95 transition-transform text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Share all loans of a person"
+            >
+              {isSharingPerson ? 'Sharing…' : '📤 By Person'}
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="bg-emerald-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-emerald-600 active:scale-95 transition-transform"
+          >
+            Add Loan
+          </button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -158,6 +210,34 @@ const LoanManager: React.FC<LoanManagerProps> = ({
               currency={currency}
             />
           </div>
+        </div>
+      )}
+
+      {/* Person Selector for Share by Person */}
+      <PersonSelectorDialog
+        isOpen={showPersonShare}
+        loans={loans}
+        currency={currency}
+        onSelect={(name) => {
+          setShowPersonShare(false);
+          setSharePersonName(name);
+        }}
+        onCancel={() => setShowPersonShare(false)}
+      />
+
+      {/* Off-screen render target for per-person share — only the chosen person's loans */}
+      {sharePersonName && personLoans.length > 0 && (
+        <div
+          aria-hidden="true"
+          style={{ position: 'absolute', left: '-9999px', top: 0, pointerEvents: 'none' }}
+        >
+          <ShareableLoanCard
+            ref={personShareRef}
+            variant="person"
+            personName={sharePersonName}
+            loans={personLoans}
+            currency={currency}
+          />
         </div>
       )}
     </div>
