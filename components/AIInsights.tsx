@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, MonthlyStats, Category } from '../types';
-import { getFinancialAdvice } from '../services/geminiService';
+import { getAiErrorMessage, getFinancialAdvice } from '../services/geminiService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import { saveFinancialAdvice, getLatestAdvice } from '../services/firebase';
 import { User } from 'firebase/auth';
@@ -24,6 +24,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
   const [loading, setLoading] = useState(false);
   const [adviceSaved, setAdviceSaved] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [adviceError, setAdviceError] = useState('');
   const { hasConsented } = useConsent();
   const aiConsentGranted = hasConsented('aiProcessing');
 
@@ -37,12 +38,13 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
       if (latestAdvice) {
         setAdvice(latestAdvice.content);
         setLastRefreshed(new Date(latestAdvice.createdAt));
+        setAdviceError('');
       } else {
-        setAdvice("Start adding transactions to get personalized financial advice from Gemini.");
+        setAdvice("Start adding transactions to get personalized financial advice from DeepSeek.");
       }
     } catch (error) {
       console.error('Error loading existing advice:', error);
-      setAdvice("Start adding transactions to get personalized financial advice from Gemini.");
+      setAdvice("Start adding transactions to get personalized financial advice from DeepSeek.");
     }
   };
 
@@ -54,6 +56,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
 
     setLoading(true);
     setAdviceSaved(false);
+    setAdviceError('');
 
     try {
       const summary = `
@@ -83,7 +86,8 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
       }
     } catch (error) {
       console.error('Error fetching advice:', error);
-      setAdvice('Unable to fetch advice at the moment. Please try again later.');
+      setAdviceError(getAiErrorMessage(error));
+      setAdvice('Unable to generate advice right now.');
     } finally {
       setLoading(false);
     }
@@ -191,6 +195,12 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
           )}
         </div>
 
+        {adviceError && (
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-xs font-semibold text-red-700">{adviceError}</p>
+          </div>
+        )}
+
         {loading ? (
           <div className="animate-pulse space-y-3">
             <div className="h-4 bg-gradient-to-r from-emerald-100 to-blue-100 rounded-xl w-3/4"></div>
@@ -222,7 +232,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ transactions, stats, categories
                         <pre className="bg-gray-50 p-2 rounded-lg overflow-x-auto my-2"><code className="text-xs font-mono text-gray-700">{children}</code></pre>
                   }}
                 >
-                  {advice || "Start adding transactions to get personalized financial advice from Gemini."}
+                  {advice || "Start adding transactions to get personalized financial advice from DeepSeek."}
                 </ReactMarkdown>
               </div>
             </div>

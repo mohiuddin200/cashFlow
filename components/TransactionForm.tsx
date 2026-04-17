@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Category, Transaction, TransactionType } from '../types';
-import { parseTransactionPrompt } from '../services/geminiService';
+import { getAiErrorMessage, parseTransactionPrompt } from '../services/geminiService';
 
 interface TransactionFormProps {
   categories: Category[];
@@ -23,6 +23,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
   const [isParsing, setIsParsing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [aiError, setAiError] = useState('');
 
   // Category creation modal state
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -63,9 +64,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
   const handleAiParse = async () => {
     if (!aiInput.trim()) return;
     setIsParsing(true);
-    const result = await parseTransactionPrompt(aiInput, categories);
-    setIsParsing(false);
-    applyParsingResult(result);
+    setAiError('');
+
+    try {
+      const result = await parseTransactionPrompt(aiInput, categories);
+      applyParsingResult(result);
+
+      if (!result) {
+        setAiError('AI could not understand that entry. Try a clearer sentence like "Spent 350 on groceries".');
+      }
+    } catch (error) {
+      setAiError(getAiErrorMessage(error));
+    } finally {
+      setIsParsing(false);
+    }
   };
 
   const handleVoiceInput = () => {
@@ -93,8 +105,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
       setAiInput(transcript);
       // Auto-trigger parsing
       setIsParsing(true);
+      setAiError('');
       parseTransactionPrompt(transcript, categories).then(result => {
         applyParsingResult(result);
+        if (!result) {
+          setAiError('AI could not understand that voice entry. Try again with amount and category in one sentence.');
+        }
+      }).catch(error => {
+        setAiError(getAiErrorMessage(error));
+      }).finally(() => {
         setIsParsing(false);
       });
     };
@@ -198,7 +217,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, onSubmit,
               {isParsing ? '⏳' : '✨'}
             </button>
           </div>
-          {isParsing && <p className="text-[9px] text-emerald-600 font-bold mt-2 animate-pulse uppercase text-center tracking-widest">Gemini is analyzing...</p>}
+          {isParsing && <p className="text-[9px] text-emerald-600 font-bold mt-2 animate-pulse uppercase text-center tracking-widest">DeepSeek is analyzing...</p>}
+          {aiError && (
+            <p className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-700">
+              {aiError}
+            </p>
+          )}
         </div>
       )}
 

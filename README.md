@@ -15,6 +15,9 @@ View your app in AI Studio: https://ai.studio/apps/drive/1N0UFFSqgeBw-FEzzxLlaWw
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Set `DEEPSEEK_API_KEY` for the server API route.
+   For Vercel production, add it in the Vercel project environment settings.
+3. If you want AI features locally, run the app with a server environment that serves `/api/deepseek`.
+   `npm run dev` starts only the Vite frontend and does not run the Vercel API route.
+4. Run the app:
    `npm run dev`
